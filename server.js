@@ -27,6 +27,15 @@ app.get('/status', (req, res) => {
   res.json({ status: 'ok', service: 'NFC-e Proxy', version: '1.0.0' });
 });
 
+// Config endpoint — expõe credenciais do Google ao app (sem expor no código-fonte)
+app.get('/config', (req, res) => {
+  res.json({
+    clientId: process.env.GOOGLE_CLIENT_ID || '',
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+    sheetId: process.env.GOOGLE_SHEET_ID || ''
+  });
+});
+
 // Consulta cupom fiscal pelo link do QR Code
 app.get('/consulta', async (req, res) => {
   const { url } = req.query;

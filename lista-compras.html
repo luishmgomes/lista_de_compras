@@ -270,6 +270,10 @@ video { width: 100%; border-radius: var(--radius-sm); margin-bottom: 8px; displa
   </div>
   <button class="icon-btn" onclick="openScanner()" aria-label="Importar cupom fiscal" title="Cupom fiscal">📷</button>
   <button class="icon-btn" onclick="openCalc()" aria-label="Calculadora" title="Calculadora">🧮</button>
+  <button class="icon-btn" id="sync-btn" onclick="handleSyncBtn()" aria-label="Sincronizar Google Sheets" title="Sincronizar" style="position:relative">
+    <span id="sync-icon">☁️</span>
+    <span id="sync-dot" style="display:none;position:absolute;top:4px;right:4px;width:8px;height:8px;background:#e24b4a;border-radius:50%"></span>
+  </button>
 </div>
 
 <div class="stats">
@@ -620,8 +624,233 @@ function confirmImport(){
   document.getElementById('subtitle').textContent=`Cupom importado · ${added} novo(s), ${matched} marcado(s)`;
 }
 
+/* ============ GOOGLE SHEETS SYNC ============ */
+// Credenciais carregadas do servidor (seguro)
+let CLIENT_ID = '', CLIENT_SECRET = '', SHEET_ID = '';
+async function loadConfig(){
+  try {
+    const r = await fetch('/config');
+    if(r.ok){ const j=await r.json(); CLIENT_ID=j.clientId; CLIENT_SECRET=j.clientSecret; SHEET_ID=j.sheetId; }
+  } catch(e){}
+}
+const SCOPE = 'https://www.googleapis.com/auth/spreadsheets';
+const SHEET_NAME = 'Lista';
+
+let gToken = null;
+let syncPending = false;
+
+function getToken(){ return localStorage.getItem('gsheet_token') || null; }
+function saveToken(t){ localStorage.setItem('gsheet_token', t); gToken = t; }
+function clearToken(){ localStorage.removeItem('gsheet_token'); localStorage.removeItem('gsheet_refresh'); gToken = null; }
+function getRefresh(){ return localStorage.getItem('gsheet_refresh') || null; }
+function saveRefresh(t){ localStorage.setItem('gsheet_refresh', t); }
+
+function updateSyncBtn(){
+  const btn = document.getElementById('sync-btn');
+  const icon = document.getElementById('sync-icon');
+  const dot = document.getElementById('sync-dot');
+  if(!btn) return;
+  if(getToken()){
+    icon.textContent = '🔄';
+    btn.title = 'Sincronizado com Google Sheets — clique para desconectar';
+    dot.style.display = syncPending ? 'block' : 'none';
+  } else {
+    icon.textContent = '☁️';
+    btn.title = 'Conectar ao Google Sheets';
+    dot.style.display = 'none';
+  }
+}
+
+function handleSyncBtn(){
+  if(getToken()){
+    if(confirm('Desconectar do Google Sheets? Os dados locais não serão apagados.')){
+      clearToken();
+      updateSyncBtn();
+      document.getElementById('subtitle').textContent = 'Desconectado do Google Sheets';
+    }
+  } else {
+    startOAuth();
+  }
+}
+
+function startOAuth(){
+  const redirect = window.location.origin + window.location.pathname;
+  const url = 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
+    client_id: CLIENT_ID,
+    redirect_uri: redirect,
+    response_type: 'code',
+    scope: SCOPE,
+    access_type: 'offline',
+    prompt: 'consent'
+  });
+  window.location.href = url;
+}
+
+async function exchangeCode(code){
+  const redirect = window.location.origin + window.location.pathname;
+  try {
+    const r = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: {'Content-Type':'application/x-www-form-urlencoded'},
+      body: new URLSearchParams({
+        code, client_id: CLIENT_ID, client_secret: CLIENT_SECRET,
+        redirect_uri: redirect, grant_type: 'authorization_code'
+      })
+    });
+    const j = await r.json();
+    if(j.access_token){ saveToken(j.access_token); if(j.refresh_token) saveRefresh(j.refresh_token); }
+    return j.access_token || null;
+  } catch(e){ return null; }
+}
+
+async function refreshToken(){
+  const rt = getRefresh();
+  if(!rt) return null;
+  try {
+    const r = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: {'Content-Type':'application/x-www-form-urlencoded'},
+      body: new URLSearchParams({
+        refresh_token: rt, client_id: CLIENT_ID, client_secret: CLIENT_SECRET,
+        grant_type: 'refresh_token'
+      })
+    });
+    const j = await r.json();
+    if(j.access_token){ saveToken(j.access_token); return j.access_token; }
+    return null;
+  } catch(e){ return null; }
+}
+
+async function ensureToken(){
+  let t = getToken();
+  if(!t){ t = await refreshToken(); }
+  return t;
+}
+
+async function sheetsRequest(method, path, body){
+  let t = await ensureToken();
+  if(!t) return null;
+  const opts = {
+    method,
+    headers: { 'Authorization': 'Bearer ' + t, 'Content-Type': 'application/json' }
+  };
+  if(body) opts.body = JSON.stringify(body);
+  let r = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID + path, opts);
+  if(r.status === 401){
+    t = await refreshToken();
+    if(!t){ clearToken(); updateSyncBtn(); return null; }
+    opts.headers['Authorization'] = 'Bearer ' + t;
+    r = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID + path, opts);
+  }
+  if(!r.ok) return null;
+  return r.json();
+}
+
+async function ensureSheet(){
+  const meta = await sheetsRequest('GET', '?fields=sheets.properties.title');
+  if(!meta) return false;
+  const exists = meta.sheets && meta.sheets.some(s => s.properties.title === SHEET_NAME);
+  if(!exists){
+    await sheetsRequest('POST', ':batchUpdate', {
+      requests:[{ addSheet:{ properties:{ title: SHEET_NAME } } }]
+    });
+    // Add header row
+    await sheetsRequest('PUT', '/values/' + SHEET_NAME + '!A1:G1?valueInputOption=RAW', {
+      values:[['id','name','qty','price','done','cat','updated']]
+    });
+  }
+  return true;
+}
+
+async function pushToSheets(){
+  const t = await ensureToken();
+  if(!t) return;
+  try {
+    await ensureSheet();
+    const rows = items.map(i => [
+      String(i.id), i.name, i.qty, i.price || '', i.done ? '1' : '0', i.cat, new Date().toISOString()
+    ]);
+    // Clear and rewrite
+    await sheetsRequest('POST', '/values/' + SHEET_NAME + '!A2:G' + (rows.length+1) + ':clear', {});
+    if(rows.length > 0){
+      await sheetsRequest('PUT', '/values/' + SHEET_NAME + '!A2:G' + (rows.length+1) + '?valueInputOption=RAW', {
+        values: rows
+      });
+    }
+    syncPending = false;
+    updateSyncBtn();
+    document.getElementById('subtitle').textContent = 'Sincronizado às ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  } catch(e) {
+    syncPending = true;
+    updateSyncBtn();
+  }
+}
+
+async function pullFromSheets(){
+  const t = await ensureToken();
+  if(!t) return false;
+  try {
+    await ensureSheet();
+    const data = await sheetsRequest('GET', '/values/' + SHEET_NAME + '!A2:G1000');
+    if(!data || !data.values || data.values.length === 0) return false;
+    const remoteItems = data.values.map(r => ({
+      id: parseFloat(r[0]) || Date.now()+Math.random(),
+      name: r[1] || '',
+      qty: parseFloat(r[2]) || 1,
+      price: r[3] ? parseFloat(r[3]) : null,
+      done: r[4] === '1',
+      cat: r[5] || 'Mercearia'
+    })).filter(i => i.name);
+    if(remoteItems.length > 0){
+      items = remoteItems;
+      save();
+      render();
+      document.getElementById('subtitle').textContent = 'Lista carregada do Google Sheets';
+      return true;
+    }
+    return false;
+  } catch(e){ return false; }
+}
+
+// Auto-sync after every save
+const _origSave = save;
+function save(){
+  _origSave();
+  if(getToken()){
+    syncPending = true;
+    updateSyncBtn();
+    clearTimeout(window._syncTimer);
+    window._syncTimer = setTimeout(pushToSheets, 2000); // debounce 2s
+  }
+}
+
 /* INIT */
 load();render();
+
+// Handle OAuth callback
+(async function(){
+  await loadConfig();
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+  if(code){
+    history.replaceState({}, '', window.location.pathname);
+    document.getElementById('subtitle').textContent = 'Conectando ao Google Sheets...';
+    const t = await exchangeCode(code);
+    if(t){
+      document.getElementById('subtitle').textContent = 'Conectado! Carregando lista...';
+      updateSyncBtn();
+      const pulled = await pullFromSheets();
+      if(!pulled && items.length > 0) await pushToSheets();
+    } else {
+      document.getElementById('subtitle').textContent = 'Erro ao conectar. Tente novamente.';
+    }
+  } else if(getToken()){
+    updateSyncBtn();
+    await pullFromSheets();
+  } else {
+    updateSyncBtn();
+  }
+})();
 
 /* Fechar sheets ao pressionar voltar no Android */
 window.addEventListener('popstate',()=>{
