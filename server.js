@@ -9,8 +9,21 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Health check
+const path = require('path');
+const fs = require('fs');
+
+// Serve o app de lista de compras
 app.get('/', (req, res) => {
+  const appPath = path.join(__dirname, 'lista-compras.html');
+  if (fs.existsSync(appPath)) {
+    res.sendFile(appPath);
+  } else {
+    res.json({ status: 'ok', service: 'NFC-e Proxy', version: '1.0.0' });
+  }
+});
+
+// Health check
+app.get('/status', (req, res) => {
   res.json({ status: 'ok', service: 'NFC-e Proxy', version: '1.0.0' });
 });
 

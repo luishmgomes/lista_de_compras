@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Lista de Compras">
+<meta name="theme-color" content="#ffffff">
+<title>Lista de Compras</title>
+<link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiTGlzdGEgZGUgQ29tcHJhcyIsInNob3J0X25hbWUiOiJDb21wcmFzIiwic3RhcnRfdXJsIjoiLiIsImRpc3BsYXkiOiJzdGFuZGFsb25lIiwiYmFja2dyb3VuZF9jb2xvciI6IiNmZmZmZmYiLCJ0aGVtZV9jb2xvciI6IiMzNzhBREQiLCJpY29ucyI6W119">
+<style>
+:root {
+  --primary: #378ADD;
+  --primary-dark: #185FA5;
+  --green: #1D9E75;
+  --green-dark: #0F6E56;
+  --bg: #f5f5f5;
+  --card: #ffffff;
+  --border: rgba(0,0,0,0.10);
+  --text: #1a1a1a;
+  --text-sec: #666;
+  --text-muted: #999;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121212;
+    --card: #1e1e1e;
+    --border: rgba(255,255,255,0.10);
+    --text: #f0f0f0;
+    --text-sec: #aaa;
+    --text-muted: #666;
+  }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; background: var(--bg); font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; color: var(--text); overflow-x: hidden; }
+
+/* HEADER */
+.header {
+  position: sticky; top: 0; z-index: 50;
+  background: var(--card);
+  border-bottom: 0.5px solid var(--border);
+  padding: 12px 16px 10px;
+  display: flex; align-items: center; gap: 10px;
+}
+.header-title { flex: 1; }
+.header-title h1 { font-size: 18px; font-weight: 600; }
+.header-title p { font-size: 12px; color: var(--text-sec); margin-top: 1px; }
+.icon-btn {
+  width: 40px; height: 40px; border-radius: 10px;
+  border: 0.5px solid var(--border);
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: 18px; color: var(--text-sec);
+  flex-shrink: 0;
+}
+.icon-btn:active { transform: scale(0.93); }
+
+/* STATS */
+.stats {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 8px; padding: 12px 16px 0;
+}
+.stat-card {
+  background: var(--card); border-radius: var(--radius-sm);
+  padding: 10px 12px; border: 0.5px solid var(--border);
+}
+.stat-label { font-size: 11px; color: var(--text-sec); }
+.stat-val { font-size: 20px; font-weight: 600; margin-top: 2px; }
+
+/* ADD BAR */
+.add-bar {
+  padding: 10px 16px;
+  background: var(--card);
+  border-bottom: 0.5px solid var(--border);
+  position: sticky; top: 65px; z-index: 40;
+}
+.add-row { display: flex; gap: 6px; }
+.add-row input {
+  flex: 1; padding: 10px 12px; font-size: 15px;
+  border-radius: var(--radius-sm); border: 0.5px solid var(--border);
+  background: var(--bg); color: var(--text);
+  -webkit-appearance: none;
+}
+.add-row input:focus { outline: none; border-color: var(--primary); }
+.qty-inp { width: 58px !important; flex: none !important; text-align: center; }
+.price-inp { width: 76px !important; flex: none !important; }
+.add-btn {
+  padding: 10px 14px; border-radius: var(--radius-sm);
+  background: var(--primary); color: #fff; border: none;
+  font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.add-btn:active { background: var(--primary-dark); transform: scale(0.95); }
+
+/* LIST */
+.list-body { padding: 10px 16px; padding-bottom: calc(80px + var(--safe-bottom)); }
+
+.cat-section { margin-bottom: 8px; border-radius: var(--radius); overflow: hidden; border: 0.5px solid var(--border); }
+.cat-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; background: var(--card);
+  cursor: pointer; user-select: none;
+}
+.cat-icon { font-size: 18px; }
+.cat-name { flex: 1; font-size: 13px; font-weight: 500; }
+.cat-badge {
+  font-size: 11px; background: var(--bg); color: var(--text-sec);
+  padding: 2px 8px; border-radius: 20px; border: 0.5px solid var(--border);
+}
+.cat-chevron { font-size: 13px; color: var(--text-muted); transition: transform .2s; }
+.cat-chevron.open { transform: rotate(180deg); }
+
+.item-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 14px;
+  background: var(--card);
+  border-top: 0.5px solid var(--border);
+}
+.item-cb { width: 20px; height: 20px; accent-color: var(--primary); flex-shrink: 0; cursor: pointer; }
+.item-name { flex: 1; font-size: 14px; line-height: 1.3; }
+.item-name.done { text-decoration: line-through; color: var(--text-muted); }
+.item-meta { font-size: 12px; color: var(--text-sec); text-align: right; }
+.item-del {
+  background: none; border: none; color: var(--text-muted);
+  font-size: 18px; padding: 4px; cursor: pointer; line-height: 1;
+}
+.item-del:active { color: #e24b4a; }
+
+.empty-state {
+  text-align: center; padding: 48px 24px;
+  color: var(--text-sec); font-size: 14px; line-height: 1.7;
+}
+.empty-icon { font-size: 40px; display: block; margin-bottom: 10px; }
+
+/* DONE SECTION */
+.done-head {
+  font-size: 11px; font-weight: 600; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: .06em;
+  padding: 14px 2px 6px;
+}
+.done-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px;
+  background: var(--card); border-radius: var(--radius-sm);
+  border: 0.5px solid var(--border);
+  margin-bottom: 4px; opacity: .65;
+}
+
+/* FAB */
+.fab-row {
+  position: fixed; bottom: calc(16px + var(--safe-bottom)); right: 16px;
+  display: flex; flex-direction: column; gap: 10px; align-items: flex-end; z-index: 60;
+}
+.fab {
+  width: 52px; height: 52px; border-radius: 50%;
+  border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; box-shadow: 0 3px 10px rgba(0,0,0,.18);
+  transition: transform .15s;
+}
+.fab:active { transform: scale(0.9); }
+.fab-primary { background: var(--primary); color: #fff; }
+.fab-secondary { background: var(--card); color: var(--text-sec); width: 44px; height: 44px; font-size: 18px; }
+
+/* BOTTOM SHEET */
+.sheet-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.45); z-index: 200; align-items: flex-end;
+}
+.sheet-overlay.open { display: flex; }
+.sheet {
+  background: var(--card); width: 100%;
+  border-radius: 20px 20px 0 0;
+  padding: 0 0 calc(20px + var(--safe-bottom));
+  max-height: 92vh; overflow-y: auto;
+}
+.sheet-handle {
+  width: 36px; height: 4px; background: var(--border);
+  border-radius: 2px; margin: 10px auto 0;
+}
+.sheet-title {
+  font-size: 16px; font-weight: 600;
+  padding: 14px 20px 10px;
+  border-bottom: 0.5px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.sheet-close { font-size: 22px; color: var(--text-sec); background: none; border: none; cursor: pointer; }
+.sheet-body { padding: 16px 20px; }
+
+/* CALC */
+.calc-display {
+  background: var(--bg); border-radius: var(--radius-sm);
+  padding: 14px 16px; margin-bottom: 14px; text-align: right;
+}
+.calc-expr { font-size: 13px; color: var(--text-sec); min-height: 18px; }
+.calc-result { font-size: 30px; font-weight: 600; }
+.calc-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; }
+.c-btn {
+  padding: 16px 4px; border-radius: var(--radius-sm);
+  border: 0.5px solid var(--border); background: var(--bg);
+  color: var(--text); font-size: 18px; cursor: pointer; text-align: center;
+}
+.c-btn:active { transform: scale(0.93); background: var(--border); }
+.c-btn.op { color: var(--primary); font-weight: 600; }
+.c-btn.eq { background: var(--primary); color: #fff; border-color: var(--primary); }
+.c-btn.eq:active { background: var(--primary-dark); }
+.c-btn.wide { grid-column: span 2; }
+.c-btn.cl { color: #e24b4a; }
+
+/* SCANNER SHEET */
+.proxy-row { display: flex; gap: 8px; margin-bottom: 6px; }
+.proxy-row input {
+  flex: 1; padding: 10px 12px; font-size: 14px;
+  border-radius: var(--radius-sm); border: 0.5px solid var(--border);
+  background: var(--bg); color: var(--text);
+}
+.proxy-row input:focus { outline: none; border-color: var(--primary); }
+.proxy-row input.ok { border-color: var(--green); }
+.scan-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+.action-btn {
+  padding: 13px 8px; border-radius: var(--radius-sm);
+  border: 0.5px solid var(--border); background: var(--bg);
+  color: var(--text); font-size: 13px; font-weight: 500;
+  cursor: pointer; text-align: center; display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.action-btn:active { transform: scale(0.96); }
+.action-btn.full { grid-column: span 2; background: var(--primary); color: #fff; border-color: var(--primary); }
+.action-btn.full:active { background: var(--primary-dark); }
+.status-box {
+  border-radius: var(--radius-sm); padding: 11px 14px;
+  font-size: 13px; line-height: 1.5; margin: 10px 0;
+}
+.s-info { background: #E6F1FB; color: #0C447C; }
+.s-ok { background: #EAF3DE; color: #27500A; }
+.s-err { background: #FCEBEB; color: #791F1F; }
+.s-warn { background: #FAEEDA; color: #633806; }
+video { width: 100%; border-radius: var(--radius-sm); margin-bottom: 8px; display: none; }
+.import-list { border: 0.5px solid var(--border); border-radius: var(--radius-sm); max-height: 240px; overflow-y: auto; margin: 10px 0; }
+.imp-item { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 0.5px solid var(--border); font-size: 13px; }
+.imp-item:last-child { border-bottom: none; }
+.imp-item input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--primary); flex-shrink: 0; }
+.imp-name { flex: 1; }
+.badge { font-size: 10px; padding: 2px 6px; border-radius: 20px; font-weight: 600; white-space: nowrap; }
+.badge-new { background: #E6F1FB; color: #0C447C; }
+.badge-match { background: #EAF3DE; color: #27500A; }
+.imp-price { font-size: 12px; color: var(--text-sec); min-width: 52px; text-align: right; }
+
+/* SPINNER */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(0,0,0,.15); border-top-color: currentColor; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -2px; margin-right: 6px; }
+
+/* SECTION LABEL */
+.section-label {
+  font-size: 11px; font-weight: 600; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: .06em;
+  margin-bottom: 6px; margin-top: 4px;
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-title">
+    <h1>🛒 Lista de Compras</h1>
+    <p id="subtitle">Pronto para adicionar itens</p>
+  </div>
+  <button class="icon-btn" onclick="openScanner()" aria-label="Importar cupom fiscal" title="Cupom fiscal">📷</button>
+  <button class="icon-btn" onclick="openCalc()" aria-label="Calculadora" title="Calculadora">🧮</button>
+</div>
+
+<div class="stats">
+  <div class="stat-card">
+    <div class="stat-label">A comprar</div>
+    <div class="stat-val" id="sp">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Comprados</div>
+    <div class="stat-val" id="sd">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Estimativa</div>
+    <div class="stat-val" id="st" style="font-size:15px;margin-top:4px">R$ 0,00</div>
+  </div>
+</div>
+
+<div class="add-bar">
+  <div class="add-row">
+    <input type="text" id="ni" placeholder="Adicionar produto..." autocomplete="off" autocorrect="off" spellcheck="false"
+      inputmode="text" enterkeyhint="next"
+      onkeydown="if(event.key==='Enter'){event.preventDefault();goToQty();}"
+      onkeyup="if(event.key==='Enter'){event.preventDefault();}">
+    <input type="number" id="nq" class="qty-inp" placeholder="Qtd" min="1" value="1"
+      inputmode="numeric" enterkeyhint="next"
+      onfocus="setTimeout(()=>this.select(),50)"
+      onclick="this.select()"
+      onkeydown="if(event.key==='Enter'){event.preventDefault();goToPrice();}"
+      onkeyup="if(event.key==='Enter'){event.preventDefault();}">
+    <input type="number" id="np" class="price-inp" placeholder="R$" step="0.01" min="0"
+      inputmode="decimal" enterkeyhint="done"
+      onfocus="setTimeout(()=>this.select(),50)"
+      onclick="this.select()"
+      onkeydown="if(event.key==='Enter'){event.preventDefault();addItem();}"
+      onkeyup="if(event.key==='Enter'){event.preventDefault();}">
+    <button class="add-btn" onclick="addItem()" aria-label="Adicionar">＋</button>
+  </div>
+</div>
+
+<div class="list-body">
+  <div id="list"></div>
+  <div id="done-section" style="display:none">
+    <div class="done-head">✓ Já no carrinho</div>
+    <div id="done-list"></div>
+  </div>
+</div>
+
+<!-- FAB -->
+<div class="fab-row">
+  <button class="fab fab-primary" onclick="document.getElementById('ni').focus();window.scrollTo(0,0)" aria-label="Novo item" title="Novo item">＋</button>
+</div>
+
+<!-- CALCULADORA -->
+<div class="sheet-overlay" id="calc-sheet" onclick="if(event.target===this)closeCalc()">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">🧮 Calculadora <button class="sheet-close" onclick="closeCalc()">×</button></div>
+    <div class="sheet-body">
+      <div class="calc-display">
+        <div class="calc-expr" id="ce"></div>
+        <div class="calc-result" id="cr">0</div>
+      </div>
+      <div class="calc-grid">
+        <button class="c-btn cl wide" onclick="cc()">C</button>
+        <button class="c-btn op" onclick="ci('/')">÷</button>
+        <button class="c-btn op" onclick="cb()">⌫</button>
+        <button class="c-btn" onclick="ci('7')">7</button>
+        <button class="c-btn" onclick="ci('8')">8</button>
+        <button class="c-btn" onclick="ci('9')">9</button>
+        <button class="c-btn op" onclick="ci('*')">×</button>
+        <button class="c-btn" onclick="ci('4')">4</button>
+        <button class="c-btn" onclick="ci('5')">5</button>
+        <button class="c-btn" onclick="ci('6')">6</button>
+        <button class="c-btn op" onclick="ci('-')">−</button>
+        <button class="c-btn" onclick="ci('1')">1</button>
+        <button class="c-btn" onclick="ci('2')">2</button>
+        <button class="c-btn" onclick="ci('3')">3</button>
+        <button class="c-btn op" onclick="ci('+')">+</button>
+        <button class="c-btn wide" onclick="ci('0')">0</button>
+        <button class="c-btn" onclick="ci('.')">.</button>
+        <button class="c-btn eq" onclick="ce_fn()">=</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SCANNER / CUPOM -->
+<div class="sheet-overlay" id="scan-sheet" onclick="if(event.target===this)closeScanner()">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">📄 Importar Cupom Fiscal <button class="sheet-close" onclick="closeScanner()">×</button></div>
+    <div class="sheet-body">
+
+      <div id="scan-p1">
+        <div class="section-label">Proxy NFC-e</div>
+        <div class="proxy-row">
+          <input type="url" id="purl" placeholder="https://seu-proxy.onrender.com" inputmode="url">
+          <button class="action-btn" style="flex:none;padding:10px 14px" onclick="saveProxy()">💾 Salvar</button>
+        </div>
+        <div style="font-size:12px;color:var(--text-sec);margin-bottom:14px;line-height:1.5">
+          Suba o servidor proxy (veja o README) e cole a URL acima.
+        </div>
+
+        <div class="section-label">Escanear QR Code</div>
+        <video id="sv" autoplay playsinline muted></video>
+        <div id="sbox" style="border:2px dashed var(--border);border-radius:var(--radius-sm);padding:24px;text-align:center;color:var(--text-sec);font-size:13px;margin-bottom:10px">
+          <span style="font-size:32px;display:block;margin-bottom:6px">📸</span>
+          Câmera para ler o QR Code do cupom
+        </div>
+
+        <div id="proxy-status" style="display:none;margin-top:8px" class="status-box s-info"></div>
+        <div class="scan-actions">
+          <button class="action-btn" id="cbtn" onclick="startCam()">📷 Iniciar câmera</button>
+          <button class="action-btn" onclick="pasteUrl()">🔗 Colar link</button>
+          <button class="action-btn" onclick="testProxy()">📡 Testar proxy</button>
+          <button class="action-btn" onclick="closeScanner()">✕ Fechar</button>
+        </div>
+      </div>
+
+      <div id="scan-p2" style="display:none">
+        <div id="sstat" class="status-box s-info"><span class="spin"></span> Consultando SEFAZ...</div>
+        <div id="imp-wrap" style="display:none">
+          <div style="font-size:13px;font-weight:600;margin-bottom:8px" id="imp-info"></div>
+          <div class="import-list" id="imp-list"></div>
+          <div class="scan-actions">
+            <button class="action-btn full" onclick="confirmImport()">✓ Importar selecionados</button>
+            <button class="action-btn" onclick="toggleAll()">☑ Marcar tudo</button>
+            <button class="action-btn" onclick="backScan()">← Voltar</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+// Navegação entre campos no mobile
+function goToQty(){
+  const nq=document.getElementById('nq');
+  nq.focus();
+  setTimeout(()=>nq.select(),80);
+}
+function goToPrice(){
+  const np=document.getElementById('np');
+  np.focus();
+  setTimeout(()=>np.select(),80);
+}
+
+const CATS = {
+  'Hortifruti':{e:'🥦',k:['alface','tomate','batata','cebola','alho','cenoura','brocoli','espinafre','couve','pepino','abobrinha','pimentao','pimentão','limao','limão','laranja','banana','maca','maçã','uva','morango','manga','abacate','abacaxi','melao','melão','melancia','fruta','verdura','legume','salsa','cebolinha','coentro','beterraba','mandioca','aipim','milho','vagem']},
+  'Laticínios':{e:'🥛',k:['leite','queijo','iogurte','manteiga','creme de leite','requeijao','requeijão','nata','muçarela','mucarela','parmesao','parmesão','ricota','coalhada','chantilly','margarina']},
+  'Carnes e Frios':{e:'🥩',k:['carne','frango','peixe','linguiça','linguica','salsicha','bacon','presunto','mortadela','peito','costela','alcatra','file','filé','atum','sardinha','camarao','camarão','porco','patinho','hamburguer','picanha','sobrecoxa','coxa']},
+  'Padaria e Cereais':{e:'🍞',k:['pao','pão','torrada','bolo','biscoito','bolacha','cereal','granola','aveia','macarrao','macarrão','arroz','feijao','feijão','farinha','acucar','açúcar','sal','maizena','fuba','fubá','cuscuz','tapioca','lentilha']},
+  'Bebidas':{e:'🥤',k:['agua','água','suco','refrigerante','cerveja','vinho','cafe','café','cha','chá','energetico','energético','achocolatado','coca','pepsi','guarana','guaraná','soda','isotonico','isotônico']},
+  'Limpeza':{e:'🧹',k:['sabao','sabão','detergente','desinfetante','alvejante','amaciante','sanitaria','sanitária','multiuso','limpador','esponja','rodo','vassoura','pano','bucha','veja','omo','ariel','brilhante','ype','ypê']},
+  'Higiene':{e:'🧴',k:['shampoo','condicionador','sabonete','dental','pasta','fio dental','desodorante','perfume','absorvente','protetor','hidratante','lenco','lenço','papel higienico','papel toalha','cotonete','escova']},
+  'Congelados':{e:'🧊',k:['pizza','lasanha','nugget','sorvete','gelado','congelado','empanado']},
+  'Mercearia':{e:'🛒',k:[]}
+};
+
+let items=[], collapsed={}, importCands=[], scanStream=null, calcStr='';
+
+function load(){
+  try{items=JSON.parse(localStorage.getItem('compras_v1')||'[]')}catch(e){items=[]}
+  try{collapsed=JSON.parse(localStorage.getItem('compras_col')||'{}')}catch(e){collapsed={}}
+  const pu=localStorage.getItem('nfce_proxy')||'';
+  if(pu){const el=document.getElementById('purl');if(el){el.value=pu;el.classList.add('ok')}}
+}
+function save(){
+  try{localStorage.setItem('compras_v1',JSON.stringify(items))}catch(e){}
+  try{localStorage.setItem('compras_col',JSON.stringify(collapsed))}catch(e){}
+}
+
+function classify(n){
+  const s=n.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  for(const[cat,d]of Object.entries(CATS)){
+    if(cat==='Mercearia')continue;
+    for(const kw of d.k){const k=kw.normalize('NFD').replace(/[\u0300-\u036f]/g,'');if(s.includes(k))return cat}
+  }
+  return 'Mercearia';
+}
+
+function addItem(name,qty,price,done){
+  const ni=document.getElementById('ni'),nq=document.getElementById('nq'),np=document.getElementById('np');
+  name=name||(ni?ni.value.trim():'');
+  qty=qty||parseFloat(nq?nq.value:1)||1;
+  price=price!==undefined?price:(np&&np.value?parseFloat(np.value):null);
+  if(!name){ni&&ni.focus();return}
+  const ei=items.findIndex(i=>i.name.toLowerCase()===name.toLowerCase());
+  if(ei>=0){items[ei].qty+=qty;if(price!=null)items[ei].price=price}
+  else items.push({id:Date.now()+Math.random(),name,qty,price,done:!!done,cat:classify(name)});
+  if(nq)nq.value='1';
+  if(np)np.value='';
+  save();render();
+  document.getElementById('subtitle').textContent='Atualizado agora';
+  if(ni){ni.value='';setTimeout(()=>{ni.focus();window.scrollTo({top:0,behavior:'smooth'})},50);}
+}
+
+function toggle(id){const i=items.find(x=>x.id===id);if(i){i.done=!i.done;save();render()}}
+function del(id){items=items.filter(i=>i.id!==id);save();render()}
+function toggleCat(c){collapsed[c]=!collapsed[c];try{localStorage.setItem('compras_col',JSON.stringify(collapsed))}catch(e){}render()}
+
+function fmt(p){return p!=null?'R$ '+p.toFixed(2).replace('.',','):''}
+
+function render(){
+  const pend=items.filter(i=>!i.done),done=items.filter(i=>i.done);
+  document.getElementById('sp').textContent=pend.length;
+  document.getElementById('sd').textContent=done.length;
+  const tot=items.reduce((s,i)=>s+(i.price?i.price*i.qty:0),0);
+  document.getElementById('st').textContent=tot>0?'R$ '+tot.toFixed(2).replace('.',','):'R$ 0,00';
+
+  const cats={};
+  for(const item of pend){if(!cats[item.cat])cats[item.cat]=[];cats[item.cat].push(item)}
+
+  const el=document.getElementById('list');
+  if(pend.length===0){
+    el.innerHTML='<div class="empty-state"><span class="empty-icon">✅</span>Tudo comprado!<br>Adicione itens para a próxima compra.</div>';
+  }else{
+    el.innerHTML=Object.entries(cats).map(([cat,ci])=>{
+      const d=CATS[cat]||{e:'🛒'};
+      const open=!collapsed[cat];
+      return`<div class="cat-section"><div class="cat-head" onclick="toggleCat('${cat}')"><span class="cat-icon">${d.e}</span><span class="cat-name">${cat}</span><span class="cat-badge">${ci.length}</span><span class="cat-chevron${open?' open':''}">▼</span></div>${open?`<div>${ci.map(item=>`<div class="item-row"><input type="checkbox" class="item-cb" ${item.done?'checked':''} onchange="toggle(${item.id})"><div class="item-name${item.done?' done':''}" style="flex:1">${item.name}${item.qty>1?` <small style="color:var(--text-muted)">${item.qty}x</small>`:''}</div><div class="item-meta">${item.price?fmt(item.price*item.qty):''}</div><button class="item-del" onclick="del(${item.id})">×</button></div>`).join('')}</div>`:''}</div>`;
+    }).join('');
+  }
+
+  const ds=document.getElementById('done-section'),dl=document.getElementById('done-list');
+  if(done.length>0){
+    ds.style.display='block';
+    dl.innerHTML=done.map(i=>`<div class="done-item"><input type="checkbox" class="item-cb" checked onchange="toggle(${i.id})"><span style="flex:1;font-size:14px;text-decoration:line-through;color:var(--text-muted)">${i.name}${i.qty>1?` <small>${i.qty}x</small>`:''}</span><span style="font-size:12px;color:var(--text-sec)">${i.price?fmt(i.price*i.qty):''}</span><button class="item-del" onclick="del(${i.id})">×</button></div>`).join('');
+  }else{ds.style.display='none'}
+}
+
+/* CALC */
+function openCalc(){document.getElementById('calc-sheet').classList.add('open')}
+function closeCalc(){document.getElementById('calc-sheet').classList.remove('open')}
+function ci(v){calcStr+=v;document.getElementById('ce').textContent=calcStr;try{const r=Function('"use strict";return('+calcStr+')')();document.getElementById('cr').textContent=isFinite(r)?parseFloat(r.toFixed(8)):''}catch(e){}}
+function ce_fn(){try{const r=Function('"use strict";return('+calcStr+')')();const v=isFinite(r)?parseFloat(r.toFixed(8)):0;document.getElementById('cr').textContent=v;document.getElementById('ce').textContent=calcStr+' =';calcStr=String(v)}catch(e){document.getElementById('cr').textContent='Erro';calcStr=''}}
+function cb(){calcStr=calcStr.slice(0,-1);document.getElementById('ce').textContent=calcStr;if(!calcStr){document.getElementById('cr').textContent='0';return}try{const r=Function('"use strict";return('+calcStr+')')();document.getElementById('cr').textContent=isFinite(r)?parseFloat(r.toFixed(8)):''}catch(e){}}
+function cc(){calcStr='';document.getElementById('ce').textContent='';document.getElementById('cr').textContent='0'}
+
+/* SCANNER */
+function saveProxy(){
+  const u=document.getElementById('purl').value.trim();
+  const box=document.getElementById('proxy-status');
+  function ps(t,m){box.style.display='block';box.className='status-box s-'+t;box.innerHTML=m}
+  if(!u){ps('warn','⚠️ Cole a URL antes de salvar.');return}
+  localStorage.setItem('nfce_proxy',u);
+  document.getElementById('purl').classList.add('ok');
+  ps('ok','✅ Proxy salvo! Clique em Testar proxy para verificar.');
+}
+function getProxy(){
+  const saved = localStorage.getItem('nfce_proxy') || '';
+  // Se rodando pelo servidor (https), usa a própria origem como proxy
+  if (!saved && window.location.protocol === 'https:') {
+    return window.location.origin;
+  }
+  return saved.replace(/\/$/,'');
+}
+
+async function testProxy(){
+  const u=getProxy();
+  const box=document.getElementById('proxy-status');
+  function ps(t,m){box.style.display='block';box.className='status-box s-'+t;box.innerHTML=m}
+  if(!u){ps('warn','⚠️ Cole a URL do proxy e clique em Salvar primeiro.');return}
+  ps('info','<span class="spin"></span> Testando conexão com o proxy...');
+  try{
+    const r=await fetch(u+'/',{signal:AbortSignal.timeout(15000)});
+    const j=await r.json();
+    ps('ok','✅ Proxy online e funcionando!');
+  }catch(e){
+    ps('err','❌ Não conectou: '+e.message+'<br><small>Verifique se a URL está correta e o servidor está rodando.</small>');
+  }
+}
+
+function openScanner(){document.getElementById('scan-sheet').classList.add('open');backScan()}
+function closeScanner(){
+  document.getElementById('scan-sheet').classList.remove('open');
+  if(scanStream){scanStream.getTracks().forEach(t=>t.stop());scanStream=null}
+  document.getElementById('sv').style.display='none';
+  document.getElementById('sbox').style.display='block';
+}
+function backScan(){
+  document.getElementById('scan-p1').style.display='block';
+  document.getElementById('scan-p2').style.display='none';
+}
+
+function setStatus(t,m){const b=document.getElementById('sstat');b.className='status-box s-'+t;b.innerHTML=m}
+
+async function startCam(){
+  try{
+    scanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280}}});
+    const v=document.getElementById('sv');v.srcObject=scanStream;v.style.display='block';
+    document.getElementById('sbox').style.display='none';
+    if('BarcodeDetector' in window){
+      const bd=new BarcodeDetector({formats:['qr_code','ean_13','code_128','upc_a','upc_e']});
+      const loop=async()=>{
+        if(!scanStream)return;
+        try{const bc=await bd.detect(v);if(bc.length>0){fetchCupom(bc[0].rawValue);return}}catch(e){}
+        requestAnimationFrame(loop);
+      };
+      v.onloadedmetadata=()=>requestAnimationFrame(loop);
+    }else{alert('Seu navegador não suporta leitura automática. Use "Colar link".')}
+  }catch(e){alert('Câmera indisponível: '+e.message+'\nVerifique as permissões do app.')}
+}
+
+function pasteUrl(){
+  const u=prompt('Cole o link do QR Code do cupom fiscal:');
+  if(u&&u.trim())fetchCupom(u.trim());
+}
+
+async function fetchCupom(url){
+  const proxy=getProxy();
+  if(!proxy){alert('Configure a URL do proxy antes de continuar.\n\nSuba o servidor no Render e cole a URL no campo "Proxy NFC-e".');return}
+  if(scanStream){scanStream.getTracks().forEach(t=>t.stop());scanStream=null}
+  document.getElementById('scan-p1').style.display='none';
+  document.getElementById('scan-p2').style.display='block';
+  document.getElementById('imp-wrap').style.display='none';
+  setStatus('info','<span class="spin"></span> Consultando o portal SEFAZ...');
+  try{
+    const r=await fetch(proxy+'/consulta?url='+encodeURIComponent(url));
+    const data=await r.json();
+    if(!r.ok||!data.success){setStatus('err','❌ '+(data.error||'Erro')+(data.detail?'<br><small>'+data.detail+'</small>':''));return}
+    const{info,items:fi}=data;
+    importCands=fi.map(item=>{
+      const ex=items.find(i=>i.name.toLowerCase()===item.name.toLowerCase());
+      return{...item,isNew:!ex,selected:true,exId:ex?ex.id:null};
+    });
+    document.getElementById('imp-info').innerHTML=info.store?`<b>${info.store}</b>${info.date?' · '+info.date:''}${info.total?' · R$ '+info.total.toFixed(2).replace('.',','):''}`:fi.length+' produto(s) encontrado(s)';
+    document.getElementById('imp-list').innerHTML=importCands.map((item,idx)=>`<div class="imp-item"><input type="checkbox" ${item.selected?'checked':''} id="ic${idx}" onchange="importCands[${idx}].selected=this.checked"><span class="imp-name">${item.name}${item.qty>1?' <small style=\'color:var(--text-muted)\'>'+item.qty+'x</small>':''}</span><span class="badge ${item.isNew?'badge-new':'badge-match'}">${item.isNew?'Novo':'Lista'}</span><span class="imp-price">${item.price?fmt(item.price):''}</span></div>`).join('');
+    setStatus('ok','✅ '+fi.length+' produto(s) encontrado(s). Revise e confirme.');
+    document.getElementById('imp-wrap').style.display='block';
+  }catch(e){setStatus('err','❌ Erro: '+e.message+'<br><small>Verifique se o proxy está online.</small>')}
+}
+
+function toggleAll(){
+  const all=importCands.every(i=>i.selected);
+  importCands.forEach((item,idx)=>{item.selected=!all;const el=document.getElementById('ic'+idx);if(el)el.checked=!all});
+}
+
+function confirmImport(){
+  let added=0,matched=0;
+  importCands.filter(i=>i.selected).forEach(item=>{
+    if(item.isNew){addItem(item.name,item.qty,item.price,true);added++}
+    else{const ei=items.findIndex(i=>i.id===item.exId);if(ei>=0){items[ei].done=true;if(item.price)items[ei].price=item.price;matched++}}
+  });
+  save();render();closeScanner();
+  document.getElementById('subtitle').textContent=`Cupom importado · ${added} novo(s), ${matched} marcado(s)`;
+}
+
+/* INIT */
+load();render();
+
+/* Fechar sheets ao pressionar voltar no Android */
+window.addEventListener('popstate',()=>{
+  if(document.getElementById('calc-sheet').classList.contains('open')){closeCalc();history.pushState(null,'','')}
+  else if(document.getElementById('scan-sheet').classList.contains('open')){closeScanner();history.pushState(null,'','')}
+});
+history.pushState(null,'','');
+</script>
+</body>
+</html>
