@@ -443,10 +443,11 @@ function load(){
   const pu=localStorage.getItem('nfce_proxy')||'';
   if(pu){const el=document.getElementById('purl');if(el){el.value=pu;el.classList.add('ok')}}
 }
-function save(){
+function saveLocal(){
   try{localStorage.setItem('compras_v1',JSON.stringify(items))}catch(e){}
   try{localStorage.setItem('compras_col',JSON.stringify(collapsed))}catch(e){}
 }
+function save(){ saveAndSync(); }
 
 function classify(n){
   const s=n.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
@@ -812,10 +813,9 @@ async function pullFromSheets(){
   } catch(e){ return false; }
 }
 
-// Auto-sync after every save
-const _origSave = save;
-function save(){
-  _origSave();
+// Auto-sync after every save (chama a função save original do localStorage + agenda push pro Sheets)
+function saveAndSync(){
+  saveLocal();
   if(getToken()){
     syncPending = true;
     updateSyncBtn();
