@@ -368,13 +368,18 @@ video { width: 100%; border-radius: var(--radius-sm); margin-bottom: 8px; displa
     <div class="sheet-body">
 
       <div id="scan-p1">
-        <div class="section-label">Proxy NFC-e</div>
-        <div class="proxy-row">
-          <input type="url" id="purl" placeholder="https://seu-proxy.onrender.com" inputmode="url">
-          <button class="action-btn" style="flex:none;padding:10px 14px" onclick="saveProxy()">💾 Salvar</button>
+        <div id="proxy-config-section">
+          <div class="section-label">Proxy NFC-e</div>
+          <div class="proxy-row">
+            <input type="url" id="purl" placeholder="https://seu-proxy.onrender.com" inputmode="url">
+            <button class="action-btn" style="flex:none;padding:10px 14px" onclick="saveProxy()">💾 Salvar</button>
+          </div>
+          <div style="font-size:12px;color:var(--text-sec);margin-bottom:14px;line-height:1.5">
+            Suba o servidor proxy (veja o README) e cole a URL acima.
+          </div>
         </div>
-        <div style="font-size:12px;color:var(--text-sec);margin-bottom:14px;line-height:1.5">
-          Suba o servidor proxy (veja o README) e cole a URL acima.
+        <div id="proxy-auto-msg" style="display:none;font-size:12px;color:var(--green);margin-bottom:14px;line-height:1.5">
+          ✅ Conectado automaticamente ao servidor.
         </div>
 
         <div class="section-label">Escanear QR Code</div>
@@ -527,11 +532,12 @@ function saveProxy(){
   ps('ok','✅ Proxy salvo! Clique em Testar proxy para verificar.');
 }
 function getProxy(){
-  const saved = localStorage.getItem('nfce_proxy') || '';
-  // Se rodando pelo servidor (https), usa a própria origem como proxy
-  if (!saved && window.location.protocol === 'https:') {
+  // Se está rodando via https (servidor), sempre usa a própria origem — não precisa configurar nada
+  if (window.location.protocol === 'https:') {
     return window.location.origin;
   }
+  // Só usa proxy manual quando rodando localmente (arquivo HTML offline)
+  const saved = localStorage.getItem('nfce_proxy') || '';
   return saved.replace(/\/$/,'');
 }
 
@@ -542,7 +548,7 @@ async function testProxy(){
   if(!u){ps('warn','⚠️ Cole a URL do proxy e clique em Salvar primeiro.');return}
   ps('info','<span class="spin"></span> Testando conexão com o proxy...');
   try{
-    const r=await fetch(u+'/',{signal:AbortSignal.timeout(15000)});
+    const r=await fetch(u+'/status',{signal:AbortSignal.timeout(15000)});
     const j=await r.json();
     ps('ok','✅ Proxy online e funcionando!');
   }catch(e){
