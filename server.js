@@ -85,9 +85,55 @@ app.get('/consulta', async (req, res) => {
 // Parser genérico — cobre SP, RJ, MG, RS, PR, SC, BA, GO e outros
 function parseNFCe(html) {
   const $ = cheerio.load(html);
-  const items = [];
+  let items = [];
 
-  // Tentativa 1: tabela de produtos (padrão mais comum — SP, RJ, MG)
+  // Tentativa 1 (PRIORITÁRIA): layout padrão NFC-e (SP, RJ, MG, e maioria dos estados)
+  // Estrutura: <tr> com nome do produto (.txtTit/.txtTit2), seguida de linha com
+  // "Qtde.:" "UN:" "Vl. Unit.:" "Vl. Total" tudo dentro do mesmo bloco/tabela.
+  $('tr').each((_, row) => {
+    const $row = $(row);
+    const rowText = $row.text().replace(/\s+/g, ' ').trim();
+
+    // Precisa conter um nome de produto E os rótulos de quantidade/valor
+    const hasQtyLabel = /Qtde\.?:?/i.test(rowText);
+    const hasUnitLabel = /(Vl\.?\s*Unit|UN:|Un:)/i.test(rowText);
+    if (!hasQtyLabel && !hasUnitLabel) return;
+
+    // Nome geralmente no primeiro <span> com classe txtTit/txtTit2 dentro da linha,
+    // ou no texto antes do primeiro "Código:"/"Qtde.:"
+    let name = $row.find('.txtTit, .txtTit2, span').first().text().trim();
+    if (!name) {
+      name = rowText.split(/Código:|Qtde\.?:?/i)[0].trim();
+    }
+
+    // Extrai quantidade: "Qtde.:  2" ou "Qtde.: 2,000"
+    const qtyMatch = rowText.match(/Qtde\.?:?\s*([\d.,]+)/i);
+    const qty = qtyMatch ? parseFloat(qtyMatch[1].replace('.', '').replace(',', '.')) || parseFloat(qtyMatch[1].replace(',', '.')) : null;
+
+    // Extrai valor unitário: "Vl. Unit.: 5,99"
+    const unitMatch = rowText.match(/Vl\.?\s*Unit\.?:?\s*([\d.,]+)/i);
+    const unitPrice = unitMatch ? parseFloat(unitMatch[1].replace('.', '').replace(',', '.')) || parseFloat(unitMatch[1].replace(',', '.')) : null;
+
+    // Extrai valor total da linha (geralmente o último número R$ na linha, fora dos rótulos acima)
+    const totalMatch = rowText.match(/Vl\.?\s*Total\.?:?\s*([\d.,]+)/i) || rowText.match(/([\d]{1,3}(?:\.\d{3})*,\d{2})\s*$/);
+    let total = totalMatch ? parseFloat(totalMatch[1].replace(/\./g, '').replace(',', '.')) : null;
+
+    // Se não achou total mas achou unit+qty, calcula
+    if (!total && unitPrice && qty) total = Math.round(unitPrice * qty * 100) / 100;
+    // Se não achou unit mas achou total, usa o total como preço (qty=1 fallback)
+    const finalPrice = total || unitPrice || null;
+    const finalQty = qty || 1;
+
+    if (name && name.length > 2 && name.length < 100 && !/total a pagar|forma de pagamento|tributos totais/i.test(name)) {
+      items.push({ name: cleanName(name), qty: finalQty, price: finalPrice });
+    }
+  });
+
+  // Remove duplicatas mantendo a primeira ocorrência válida
+  items = dedupeItems(items);
+  if (items.length > 0) return items;
+
+  // Tentativa 2: tabela de produtos genérica com cabeçalho (alguns estados)
   $('table').each((_, table) => {
     const headers = [];
     $(table).find('th').each((_, th) => headers.push($(th).text().trim().toLowerCase()));
@@ -114,9 +160,10 @@ function parseNFCe(html) {
     });
   });
 
+  items = dedupeItems(items);
   if (items.length > 0) return items;
 
-  // Tentativa 2: divs com classe de produto (RS, PR, SC)
+  // Tentativa 3: divs com classe de produto (RS, PR, SC)
   const selectors = [
     '.txtTit', '.item', '.produto', '#tabResult tr',
     '[class*="prod"]', '[class*="item"]', '[id*="prod"]'
@@ -142,26 +189,30 @@ function parseNFCe(html) {
     if (items.length > 0) break;
   }
 
-  // Tentativa 3: busca por padrões de texto (fallback)
-  if (items.length === 0) {
-    const text = $('body').text();
-    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 3);
+  items = dedupeItems(items);
+  if (items.length > 0) return items;
 
-    lines.forEach(line => {
-      const priceMatch = line.match(/(\d{1,3}[.,]\d{2})\s*$/);
-      if (!priceMatch) return;
-      if (/total|subtotal|troco|desconto|taxa|cnpj|cpf/i.test(line)) return;
+  // Tentativa 4: busca por padrões de texto (fallback)
+  const text = $('body').text();
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 3);
 
-      const name = line.replace(priceMatch[0], '').trim();
-      const price = parseFloat(priceMatch[1].replace(',', '.'));
+  lines.forEach(line => {
+    const priceMatch = line.match(/(\d{1,3}[.,]\d{2})\s*$/);
+    if (!priceMatch) return;
+    if (/total|subtotal|troco|desconto|taxa|cnpj|cpf/i.test(line)) return;
 
-      if (name.length > 3 && name.length < 80) {
-        items.push({ name: cleanName(name), qty: 1, price });
-      }
-    });
-  }
+    const name = line.replace(priceMatch[0], '').trim();
+    const price = parseFloat(priceMatch[1].replace(',', '.'));
 
-  // Remove duplicatas
+    if (name.length > 3 && name.length < 80) {
+      items.push({ name: cleanName(name), qty: 1, price });
+    }
+  });
+
+  return dedupeItems(items);
+}
+
+function dedupeItems(items) {
   const seen = new Set();
   return items.filter(item => {
     const key = item.name.toLowerCase();
