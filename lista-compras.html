@@ -1201,7 +1201,10 @@ function updateSyncBtn(){
 
 function handleSyncBtn(){
   if(getToken()){
-    if(confirm('Desconectar do Google Sheets? Os dados locais não serão apagados.')){
+    const choice = confirm('Forçar nova sincronização? Isso vai limpar a planilha e reescrever com os dados atuais do app (corrige duplicatas).\n\nClique OK para sincronizar, ou Cancelar para ver outras opções.');
+    if(choice){
+      forceResync();
+    } else if(confirm('Desconectar do Google Sheets? Os dados locais não serão apagados.')){
       clearToken();
       updateSyncBtn();
       document.getElementById('subtitle').textContent = 'Desconectado do Google Sheets';
@@ -1209,6 +1212,12 @@ function handleSyncBtn(){
   } else {
     startOAuth();
   }
+}
+
+async function forceResync(){
+  document.getElementById('subtitle').textContent = 'Limpando e sincronizando...';
+  await pushToSheets();
+  document.getElementById('subtitle').textContent = 'Planilha limpa e sincronizada!';
 }
 
 function startOAuth(){
@@ -1308,8 +1317,11 @@ async function pushToSheets(){
     const rows = items.map(i => [
       String(i.id), i.name, i.qty, i.price || '', i.done ? '1' : '0', i.cat, new Date().toISOString()
     ]);
-    // Clear and rewrite
-    await sheetsRequest('POST', '/values/' + SHEET_NAME + '!A2:G' + (rows.length+1) + ':clear', {});
+    // IMPORTANTE: limpa um range generoso (até 2000 linhas) para garantir que itens
+    // excluídos não deixem "lixo" órfão no Sheets caso a lista tenha diminuído de tamanho.
+    // Limpar apenas até rows.length deixava sobras de quando a lista era maior, e essas
+    // sobras voltavam como itens fantasma no próximo pull.
+    await sheetsRequest('POST', '/values/' + SHEET_NAME + '!A2:G2000:clear', {});
     if(rows.length > 0){
       await sheetsRequest('PUT', '/values/' + SHEET_NAME + '!A2:G' + (rows.length+1) + '?valueInputOption=RAW', {
         values: rows
@@ -1342,9 +1354,9 @@ async function pullFromSheets(){
     const localVersion = localStorage.getItem('compras_version');
     const lastPushedVersion = localStorage.getItem('compras_last_pushed_version');
 
-    const data = await sheetsRequest('GET', '/values/' + SHEET_NAME + '!A2:G1000');
+    const data = await sheetsRequest('GET', '/values/' + SHEET_NAME + '!A2:G2000');
     if(!data || !data.values || data.values.length === 0) return false;
-    const remoteItems = data.values.map(r => ({
+    let remoteItems = data.values.map(r => ({
       id: parseFloat(r[0]) || Date.now()+Math.random(),
       name: r[1] || '',
       qty: parseFloat(r[2]) || 1,
@@ -1352,6 +1364,12 @@ async function pullFromSheets(){
       done: r[4] === '1',
       cat: r[5] || 'Mercearia'
     })).filter(i => i.name);
+
+    // Proteção extra: remove duplicatas pelo id (mantém a última ocorrência, que é a mais recente)
+    const byId = new Map();
+    for(const it of remoteItems) byId.set(it.id, it);
+    remoteItems = Array.from(byId.values());
+
     if(remoteItems.length > 0){
       items = remoteItems;
       saveLocal(); // salva sem disparar novo push (evita loop)
