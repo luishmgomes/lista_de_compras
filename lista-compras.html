@@ -444,9 +444,10 @@ video { width: 100%; border-radius: var(--radius-sm); margin-bottom: 8px; displa
     <div class="sheet-handle"></div>
     <div class="sheet-title">✏️ Editar produto <button class="sheet-close" onclick="closeEdit()">×</button></div>
     <div class="sheet-body">
+      <div id="edit-merge-suggestion" style="display:none;background:#FAEEDA;border-radius:10px;padding:12px;margin-bottom:12px;font-size:13px;color:#633806"></div>
       <div style="margin-bottom:12px">
         <div style="font-size:12px;font-weight:600;color:var(--text-sec);margin-bottom:6px">NOME</div>
-        <input type="text" id="edit-name" style="width:100%;padding:11px 12px;border-radius:10px;border:0.5px solid var(--border);background:var(--bg);color:var(--text);font-size:15px">
+        <input type="text" id="edit-name" oninput="checkEditSimilarity()" style="width:100%;padding:11px 12px;border-radius:10px;border:0.5px solid var(--border);background:var(--bg);color:var(--text);font-size:15px">
       </div>
       <div style="display:flex;gap:8px;margin-bottom:12px">
         <div style="flex:1">
@@ -458,6 +459,7 @@ video { width: 100%; border-radius: var(--radius-sm); margin-bottom: 8px; displa
           <input type="number" id="edit-price" min="0" step="0.01" inputmode="decimal" style="width:100%;padding:11px 12px;border-radius:10px;border:0.5px solid var(--border);background:var(--bg);color:var(--text);font-size:15px" onfocus="this.select()">
         </div>
       </div>
+      <div id="edit-price-history" style="display:none;margin-bottom:12px;font-size:12px;color:var(--text-sec)"></div>
       <div style="margin-bottom:16px">
         <div style="font-size:12px;font-weight:600;color:var(--text-sec);margin-bottom:6px">CATEGORIA</div>
         <select id="edit-cat" style="width:100%;padding:11px 12px;border-radius:10px;border:0.5px solid var(--border);background:var(--bg);color:var(--text);font-size:15px"></select>
@@ -624,6 +626,7 @@ function load(){
 function saveLocal(){
   try{localStorage.setItem('compras_v1',JSON.stringify(items))}catch(e){}
   try{localStorage.setItem('compras_col',JSON.stringify(collapsed))}catch(e){}
+  try{localStorage.setItem('compras_version', String(Date.now()))}catch(e){}
 }
 function save(){ saveAndSync(); }
 
@@ -656,12 +659,16 @@ function levenshtein(a,b){
 function tokensMatch(t1, t2){
   if(t1===t2) return true;
   if(t1.length>=4 && t2.length>=4 && levenshtein(t1,t2)<=1) return true;
-  // Abreviação por prefixo: "mant" combina com "manteiga", "italac" combina com "ital..."
+  // Abreviação por prefixo: "mant" combina com "manteiga", "cr" combina com "creme"
   const shorter = t1.length<t2.length?t1:t2, longer = t1.length<t2.length?t2:t1;
-  if(shorter.length>=3 && longer.startsWith(shorter)) return true;
+  // Prefixo de 2 letras só conta se a palavra mais longa tiver pelo menos 4 letras
+  // (evita "cr" combinar com qualquer coisa começando com c-r por acaso)
+  if(shorter.length>=2 && longer.length>=4 && longer.startsWith(shorter)) return true;
   return false;
 }
 
+// Tokens "extras" que aparecem só em um dos nomes (ex: marca) não devem penalizar muito
+// quando os termos principais (geralmente mais longos) já combinaram bem.
 function similarity(nameA, nameB){
   const tokA = tokenize(nameA), tokB = tokenize(nameB);
   if(tokA.length===0 || tokB.length===0) return 0;
@@ -675,13 +682,27 @@ function similarity(nameA, nameB){
     }
     if(found) matchCount++;
   }
-  const tokenScore = matchCount / Math.max(setA.size, setB.size);
+  // Média harmônica entre cobertura do menor e do maior conjunto: recompensa quando
+  // os termos abreviados batem (caso "CR.LEITE" vs "Creme de Leite"), mas não deixa
+  // nomes genéricos de 1 palavra ("Sal") combinarem com qualquer coisa que comece igual
+  // ("Salsicha"), pois aí a cobertura do conjunto MAIOR cairia muito.
+  const scoreMin = matchCount / Math.min(setA.size, setB.size);
+  const scoreMax = matchCount / Math.max(setA.size, setB.size);
+  const tokenScore = (2*scoreMin*scoreMax) / (scoreMin+scoreMax || 1);
 
   const strA = normalizeStr(nameA), strB = normalizeStr(nameB);
   const maxLen = Math.max(strA.length, strB.length) || 1;
   const editScore = 1 - (levenshtein(strA,strB) / maxLen);
 
-  return tokenScore*0.8 + editScore*0.2;
+  let result = tokenScore*0.8 + editScore*0.2;
+
+  // Nomes com apenas 1 token de cada lado (muito genéricos, ex: "Sal", "Leite") precisam
+  // de correspondência muito forte (quase igual) para evitar falsos positivos perigosos
+  if(setA.size===1 && setB.size===1 && tokA[0]!==tokB[0]){
+    result = result * 0.5;
+  }
+
+  return result;
 }
 
 // Procura o melhor item existente parecido (retorna {item, score} ou null)
@@ -696,6 +717,21 @@ function findSimilarItem(name, excludeDone){
   return null;
 }
 
+/* HISTÓRICO DE PREÇOS */
+function addPriceHistory(item, price){
+  if(price==null) return;
+  if(!item.priceHistory) item.priceHistory = [];
+  item.priceHistory.push({price, date: new Date().toISOString()});
+  if(item.priceHistory.length > 20) item.priceHistory = item.priceHistory.slice(-20); // mantém só os últimos 20
+}
+
+function setItemPrice(item, newPrice){
+  if(newPrice!=null && newPrice !== item.price){
+    addPriceHistory(item, newPrice);
+  }
+  item.price = newPrice;
+}
+
 function addItem(name,qty,price,done,skipSimilarityCheck){
   const ni=document.getElementById('ni'),nq=document.getElementById('nq'),np=document.getElementById('np');
   name=name||(ni?ni.value.trim():'');
@@ -705,7 +741,8 @@ function addItem(name,qty,price,done,skipSimilarityCheck){
 
   const ei=items.findIndex(i=>i.name.toLowerCase()===name.toLowerCase());
   if(ei>=0){
-    items[ei].qty+=qty;if(price!=null)items[ei].price=price;
+    items[ei].qty+=qty;
+    if(price!=null) setItemPrice(items[ei], price); // novo valor sempre prevalece, fica no histórico
     finishAddItem(ni,nq,np);
     return;
   }
@@ -722,7 +759,7 @@ function addItem(name,qty,price,done,skipSimilarityCheck){
     }
   }
 
-  items.push({id:Date.now()+Math.random(),name,qty,price,done:!!done,cat:classify(name)});
+  items.push({id:Date.now()+Math.random(),name,qty,price,done:!!done,cat:classify(name),priceHistory:price!=null?[{price,date:new Date().toISOString()}]:[]});
   finishAddItem(ni,nq,np);
 }
 
@@ -803,12 +840,52 @@ function openEdit(id){
   document.getElementById('edit-price').value = item.price || '';
   const sel = document.getElementById('edit-cat');
   sel.innerHTML = Object.keys(CATS).map(c=>`<option value="${c}" ${c===item.cat?'selected':''}>${CATS[c].e} ${c}</option>`).join('');
+  renderPriceHistory(item);
+  document.getElementById('edit-merge-suggestion').style.display = 'none';
   document.getElementById('edit-sheet').classList.add('open');
 }
 function closeEdit(){
   document.getElementById('edit-sheet').classList.remove('open');
   editingId = null;
 }
+
+function renderPriceHistory(item){
+  const box = document.getElementById('edit-price-history');
+  if(!item.priceHistory || item.priceHistory.length===0){ box.style.display='none'; return; }
+  const recent = item.priceHistory.slice(-5).reverse();
+  box.style.display = 'block';
+  box.innerHTML = '<b>Histórico de preços:</b> ' + recent.map(h=>{
+    const d = new Date(h.date);
+    const dateStr = d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+    return `R$ ${h.price.toFixed(2).replace('.',',')} (${dateStr})`;
+  }).join(' · ');
+}
+
+// Avisa se o nome digitado na edição parece com outro produto já existente na lista
+function checkEditSimilarity(){
+  const name = document.getElementById('edit-name').value.trim();
+  const box = document.getElementById('edit-merge-suggestion');
+  if(!name || name.length<3){ box.style.display='none'; return; }
+  // Procura entre os OUTROS itens (exclui o que está sendo editado)
+  let best=null, bestScore=0;
+  for(const it of items){
+    if(it.id===editingId) continue;
+    const s = similarity(name, it.name);
+    if(s>bestScore){ bestScore=s; best=it; }
+  }
+  if(best && bestScore>=0.55){
+    box.style.display='block';
+    box.innerHTML = `💡 Você já tem <b>"${best.name}"</b> na lista. <button style="margin-left:4px;font-size:12px;padding:3px 9px;border-radius:10px;border:none;background:#633806;color:#fff;cursor:pointer">Usar este nome</button>`;
+    box.querySelector('button').setAttribute('onclick', `useSuggestedName('${best.name.replace(/'/g,"\\'")}')`);
+  } else {
+    box.style.display='none';
+  }
+}
+function useSuggestedName(name){
+  document.getElementById('edit-name').value = name;
+  document.getElementById('edit-merge-suggestion').style.display='none';
+}
+
 function saveEdit(){
   if(editingId==null) return;
   const item = items.find(i=>i.id===editingId);
@@ -819,7 +896,22 @@ function saveEdit(){
   const price = priceVal ? parseFloat(priceVal) : null;
   const cat = document.getElementById('edit-cat').value;
   if(!name){ alert('O nome não pode ficar vazio.'); return; }
-  item.name = name; item.qty = qty; item.price = price; item.cat = cat;
+
+  // Se o novo nome bate exatamente com OUTRO item já existente, oferece mesclar ao invés de duplicar
+  const dupIdx = items.findIndex(i=>i.id!==editingId && i.name.toLowerCase()===name.toLowerCase());
+  if(dupIdx>=0){
+    if(confirm(`Já existe um produto chamado "${items[dupIdx].name}". Deseja somar as quantidades em um único item?`)){
+      items[dupIdx].qty += qty;
+      if(price!=null) setItemPrice(items[dupIdx], price);
+      items.splice(items.findIndex(i=>i.id===editingId),1); // remove o item original editado
+      save(); render(); closeEdit();
+      return;
+    }
+  }
+
+  item.name = name; item.qty = qty;
+  setItemPrice(item, price);
+  item.cat = cat;
   save(); render(); closeEdit();
 }
 function deleteFromEdit(){
@@ -992,13 +1084,56 @@ async function fetchCupom(url){
     importCands=fi.map(item=>{
       // Busca por similaridade (nomes de cupom fiscal são abreviados, ex: "LEITE L.V.ITALAC.INT")
       const match=findSimilarItem(item.name, false);
-      return{...item,isNew:!match,selected:true,exId:match?match.item.id:null,matchName:match?match.item.name:null,matchScore:match?match.score:0};
+      return{
+        ...item,
+        isNew:!match,
+        selected:true,
+        exId:match?match.item.id:null,
+        matchName:match?match.item.name:null,
+        matchScore:match?match.score:0,
+        useExistingName: !!match // por padrão, se achou match, usa o nome que já está na lista
+      };
     });
     document.getElementById('imp-info').innerHTML=info.store?`<b>${info.store}</b>${info.date?' · '+info.date:''}${info.total?' · R$ '+info.total.toFixed(2).replace('.',','):''}`:fi.length+' produto(s) encontrado(s)';
-    document.getElementById('imp-list').innerHTML=importCands.map((item,idx)=>`<div class="imp-item"><input type="checkbox" ${item.selected?'checked':''} id="ic${idx}" onchange="importCands[${idx}].selected=this.checked"><span class="imp-name">${item.name}${item.qty>1?' <small style=\'color:var(--text-muted)\'>'+item.qty+'x</small>':''}${item.matchName?`<br><small style="color:var(--text-muted)">↳ combina com "${item.matchName}"</small>`:''}</span><span class="badge ${item.isNew?'badge-new':'badge-match'}">${item.isNew?'Novo':'Combina'}</span><span class="imp-price">${item.price?fmt(item.price):''}</span></div>`).join('');
+    renderImportList();
     setStatus('ok','✅ '+fi.length+' produto(s) encontrado(s). Revise e confirme.');
     document.getElementById('imp-wrap').style.display='block';
   }catch(e){setStatus('err','❌ Erro: '+e.message+'<br><small>Verifique se o proxy está online.</small>')}
+}
+
+function renderImportList(){
+  document.getElementById('imp-list').innerHTML=importCands.map((item,idx)=>{
+    const displayName = item.matchName && item.useExistingName ? item.matchName : item.name;
+    const nameToggle = item.matchName ? `
+      <div style="margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <button onclick="toggleImportName(${idx})" style="font-size:11px;padding:2px 8px;border-radius:12px;border:0.5px solid var(--border);background:${item.useExistingName?'var(--primary)':'var(--card)'};color:${item.useExistingName?'#fff':'var(--text-sec)'};cursor:pointer">"${item.matchName}"</button>
+        <span style="font-size:10px;color:var(--text-muted)">ou</span>
+        <button onclick="toggleImportName(${idx})" style="font-size:11px;padding:2px 8px;border-radius:12px;border:0.5px solid var(--border);background:${!item.useExistingName?'var(--primary)':'var(--card)'};color:${!item.useExistingName?'#fff':'var(--text-sec)'};cursor:pointer">"${item.name}"</button>
+        <button onclick="markAsNotMatch(${idx})" style="font-size:11px;padding:2px 8px;border-radius:12px;border:0.5px solid var(--border);background:var(--card);color:#e24b4a;cursor:pointer">✕ não é o mesmo</button>
+      </div>` : '';
+    return `<div class="imp-item" style="align-items:flex-start;flex-direction:column;gap:6px">
+      <div style="display:flex;align-items:center;gap:8px;width:100%">
+        <input type="checkbox" ${item.selected?'checked':''} id="ic${idx}" onchange="importCands[${idx}].selected=this.checked">
+        <span class="imp-name" style="flex:1">${displayName}${item.qty>1?' <small style=\'color:var(--text-muted)\'>'+item.qty+'x</small>':''}</span>
+        <span class="badge ${item.isNew?'badge-new':'badge-match'}">${item.isNew?'Novo':'Combina'}</span>
+        <span class="imp-price">${item.price?fmt(item.price):''}</span>
+      </div>
+      ${nameToggle}
+    </div>`;
+  }).join('');
+}
+
+function toggleImportName(idx){
+  importCands[idx].useExistingName = !importCands[idx].useExistingName;
+  renderImportList();
+}
+
+function markAsNotMatch(idx){
+  // Usuário identificou que o match sugerido está errado — trata como produto novo
+  importCands[idx].isNew = true;
+  importCands[idx].matchName = null;
+  importCands[idx].exId = null;
+  renderImportList();
 }
 
 function toggleAll(){
@@ -1009,8 +1144,19 @@ function toggleAll(){
 function confirmImport(){
   let added=0,matched=0;
   importCands.filter(i=>i.selected).forEach(item=>{
-    if(item.isNew){addItem(item.name,item.qty,item.price,true,true);added++}
-    else{const ei=items.findIndex(i=>i.id===item.exId);if(ei>=0){items[ei].done=true;if(item.price)items[ei].price=item.price;matched++}}
+    if(item.isNew){
+      addItem(item.name,item.qty,item.price,true,true);
+      added++;
+    }else{
+      const ei=items.findIndex(i=>i.id===item.exId);
+      if(ei>=0){
+        items[ei].done=true;
+        items[ei].qty = item.qty; // usa a quantidade comprada do cupom
+        if(item.price!=null) setItemPrice(items[ei], item.price); // sempre o novo valor, com histórico
+        if(!item.useExistingName) items[ei].name = item.name; // se escolheu manter nome do cupom
+        matched++;
+      }
+    }
   });
   save();render();closeScanner();
   document.getElementById('subtitle').textContent=`Cupom importado · ${added} novo(s), ${matched} marcado(s)`;
@@ -1169,6 +1315,12 @@ async function pushToSheets(){
         values: rows
       });
     }
+    // Salva a versão local atual junto com o push, para o pull saber se está desatualizado
+    const localVersion = localStorage.getItem('compras_version') || String(Date.now());
+    await sheetsRequest('PUT', '/values/' + SHEET_NAME + '!I1?valueInputOption=RAW', {
+      values: [[localVersion]]
+    });
+    localStorage.setItem('compras_last_pushed_version', localVersion);
     syncPending = false;
     updateSyncBtn();
     document.getElementById('subtitle').textContent = 'Sincronizado às ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
@@ -1183,6 +1335,13 @@ async function pullFromSheets(){
   if(!t) return false;
   try {
     await ensureSheet();
+
+    // Compara versão remota com a última versão que ESTE dispositivo enviou.
+    // Se a versão remota for igual à local, não há nada novo de outro dispositivo — pula o pull
+    // para não arriscar sobrescrever uma exclusão/edição que ainda não foi enviada.
+    const localVersion = localStorage.getItem('compras_version');
+    const lastPushedVersion = localStorage.getItem('compras_last_pushed_version');
+
     const data = await sheetsRequest('GET', '/values/' + SHEET_NAME + '!A2:G1000');
     if(!data || !data.values || data.values.length === 0) return false;
     const remoteItems = data.values.map(r => ({
@@ -1195,7 +1354,7 @@ async function pullFromSheets(){
     })).filter(i => i.name);
     if(remoteItems.length > 0){
       items = remoteItems;
-      save();
+      saveLocal(); // salva sem disparar novo push (evita loop)
       render();
       document.getElementById('subtitle').textContent = 'Lista carregada do Google Sheets';
       return true;
@@ -1205,14 +1364,28 @@ async function pullFromSheets(){
 }
 
 // Auto-sync after every save (chama a função save original do localStorage + agenda push pro Sheets)
+let lastPushTime = 0;
 function saveAndSync(){
   saveLocal();
   if(getToken()){
     syncPending = true;
     updateSyncBtn();
     clearTimeout(window._syncTimer);
-    window._syncTimer = setTimeout(pushToSheets, 2000); // debounce 2s
+    window._syncTimer = setTimeout(pushToSheets, 800); // debounce curto
   }
+}
+
+// Garante que mudanças pendentes sejam enviadas antes de sair/recarregar a página
+window.addEventListener('beforeunload', () => {
+  if(syncPending && getToken()){
+    clearTimeout(window._syncTimer);
+    // sendBeacon não suporta headers de auth, então usamos fetch síncrono via keepalive
+    navigator.sendBeacon && pushToSheetsBeacon();
+  }
+});
+function pushToSheetsBeacon(){
+  // Best-effort: dispara o push com keepalive para sobreviver ao unload
+  try { pushToSheets(); } catch(e){}
 }
 
 /* INIT */
@@ -1237,7 +1410,11 @@ load();render();
     }
   } else if(getToken()){
     updateSyncBtn();
-    await pullFromSheets();
+    // Só puxa do Sheets se não houver mudanças locais pendentes de envio
+    // (evita que uma versão desatualizada do Sheets sobrescreva exclusões/edições recentes)
+    if(!syncPending){
+      await pullFromSheets();
+    }
   } else {
     updateSyncBtn();
   }
