@@ -121,9 +121,19 @@ html, body { height: 100%; background: var(--bg); font-family: -apple-system, 'S
   border-top: 0.5px solid var(--border);
 }
 .item-cb { width: 20px; height: 20px; accent-color: var(--primary); flex-shrink: 0; cursor: pointer; }
-.item-name { flex: 1; font-size: 14px; line-height: 1.3; }
+.item-name { flex: 1; font-size: 14px; line-height: 1.3; cursor: pointer; }
 .item-name.done { text-decoration: line-through; color: var(--text-muted); }
-.item-meta { font-size: 12px; color: var(--text-sec); text-align: right; }
+.item-qty-badge {
+  font-size: 13px; font-weight: 700; color: var(--primary);
+  background: rgba(55,138,221,0.12); padding: 2px 9px; border-radius: 20px;
+  margin-left: 6px; white-space: nowrap;
+}
+.item-meta { font-size: 13px; color: var(--text-sec); text-align: right; font-weight: 500; }
+.item-edit {
+  background: none; border: none; color: var(--text-muted);
+  font-size: 16px; padding: 4px 6px; cursor: pointer; line-height: 1;
+}
+.item-edit:active { color: var(--primary); }
 .item-del {
   background: none; border: none; color: var(--text-muted);
   font-size: 18px; padding: 4px; cursor: pointer; line-height: 1;
@@ -332,29 +342,129 @@ video { width: 100%; border-radius: var(--radius-sm); margin-bottom: 8px; displa
     <div class="sheet-handle"></div>
     <div class="sheet-title">🧮 Calculadora <button class="sheet-close" onclick="closeCalc()">×</button></div>
     <div class="sheet-body">
-      <div class="calc-display">
-        <div class="calc-expr" id="ce"></div>
-        <div class="calc-result" id="cr">0</div>
+      <div style="display:flex;gap:6px;margin-bottom:14px">
+        <button class="calc-tab active" id="tab-basic" onclick="switchCalcTab('basic')" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid var(--border);background:var(--primary);color:#fff;font-size:13px;font-weight:500;cursor:pointer">Básica</button>
+        <button class="calc-tab" id="tab-unit" onclick="switchCalcTab('unit')" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-weight:500;cursor:pointer">Preço/Kg-L</button>
       </div>
-      <div class="calc-grid">
-        <button class="c-btn cl wide" onclick="cc()">C</button>
-        <button class="c-btn op" onclick="ci('/')">÷</button>
-        <button class="c-btn op" onclick="cb()">⌫</button>
-        <button class="c-btn" onclick="ci('7')">7</button>
-        <button class="c-btn" onclick="ci('8')">8</button>
-        <button class="c-btn" onclick="ci('9')">9</button>
-        <button class="c-btn op" onclick="ci('*')">×</button>
-        <button class="c-btn" onclick="ci('4')">4</button>
-        <button class="c-btn" onclick="ci('5')">5</button>
-        <button class="c-btn" onclick="ci('6')">6</button>
-        <button class="c-btn op" onclick="ci('-')">−</button>
-        <button class="c-btn" onclick="ci('1')">1</button>
-        <button class="c-btn" onclick="ci('2')">2</button>
-        <button class="c-btn" onclick="ci('3')">3</button>
-        <button class="c-btn op" onclick="ci('+')">+</button>
-        <button class="c-btn wide" onclick="ci('0')">0</button>
-        <button class="c-btn" onclick="ci('.')">.</button>
-        <button class="c-btn eq" onclick="ce_fn()">=</button>
+
+      <div id="calc-basic-panel">
+        <div class="calc-display">
+          <div class="calc-expr" id="ce"></div>
+          <div class="calc-result" id="cr">0</div>
+        </div>
+        <div class="calc-grid">
+          <button class="c-btn cl wide" onclick="cc()">C</button>
+          <button class="c-btn op" onclick="ci('/')">÷</button>
+          <button class="c-btn op" onclick="cb()">⌫</button>
+          <button class="c-btn" onclick="ci('7')">7</button>
+          <button class="c-btn" onclick="ci('8')">8</button>
+          <button class="c-btn" onclick="ci('9')">9</button>
+          <button class="c-btn op" onclick="ci('*')">×</button>
+          <button class="c-btn" onclick="ci('4')">4</button>
+          <button class="c-btn" onclick="ci('5')">5</button>
+          <button class="c-btn" onclick="ci('6')">6</button>
+          <button class="c-btn op" onclick="ci('-')">−</button>
+          <button class="c-btn" onclick="ci('1')">1</button>
+          <button class="c-btn" onclick="ci('2')">2</button>
+          <button class="c-btn" onclick="ci('3')">3</button>
+          <button class="c-btn op" onclick="ci('+')">+</button>
+          <button class="c-btn wide" onclick="ci('0')">0</button>
+          <button class="c-btn" onclick="ci('.')">.</button>
+          <button class="c-btn eq" onclick="ce_fn()">=</button>
+        </div>
+      </div>
+
+      <div id="calc-unit-panel" style="display:none">
+        <div style="font-size:12px;color:var(--text-sec);margin-bottom:12px;line-height:1.5">Compare dois produtos e veja qual tem o melhor preço por kg ou litro.</div>
+
+        <div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:10px">
+          <div style="font-size:12px;font-weight:600;color:var(--text-sec);margin-bottom:8px">PRODUTO A</div>
+          <div style="display:flex;gap:6px;margin-bottom:6px">
+            <input type="number" id="ua-price" placeholder="Preço R$" step="0.01" inputmode="decimal" style="flex:1;padding:9px 10px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);color:var(--text);font-size:14px" oninput="calcUnitPrice()">
+            <input type="number" id="ua-qty" placeholder="Peso/Volume" step="0.01" inputmode="decimal" style="flex:1;padding:9px 10px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);color:var(--text);font-size:14px" oninput="calcUnitPrice()">
+            <select id="ua-unit" onchange="calcUnitPrice()" style="padding:9px 6px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px">
+              <option value="g">g</option>
+              <option value="kg">kg</option>
+              <option value="ml">ml</option>
+              <option value="l">L</option>
+            </select>
+          </div>
+          <div id="ua-result" style="font-size:13px;color:var(--text-sec);font-weight:500"></div>
+        </div>
+
+        <div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:14px">
+          <div style="font-size:12px;font-weight:600;color:var(--text-sec);margin-bottom:8px">PRODUTO B</div>
+          <div style="display:flex;gap:6px;margin-bottom:6px">
+            <input type="number" id="ub-price" placeholder="Preço R$" step="0.01" inputmode="decimal" style="flex:1;padding:9px 10px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);color:var(--text);font-size:14px" oninput="calcUnitPrice()">
+            <input type="number" id="ub-qty" placeholder="Peso/Volume" step="0.01" inputmode="decimal" style="flex:1;padding:9px 10px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);color:var(--text);font-size:14px" oninput="calcUnitPrice()">
+            <select id="ub-unit" onchange="calcUnitPrice()" style="padding:9px 6px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px">
+              <option value="g">g</option>
+              <option value="kg">kg</option>
+              <option value="ml">ml</option>
+              <option value="l">L</option>
+            </select>
+          </div>
+          <div id="ub-result" style="font-size:13px;color:var(--text-sec);font-weight:500"></div>
+        </div>
+
+        <div id="unit-winner" style="text-align:center;font-size:15px;font-weight:700;padding:12px;border-radius:10px;display:none"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ITEM PARECIDO ENCONTRADO -->
+<div class="sheet-overlay" id="similar-sheet" onclick="if(event.target===this)closeSimilar()">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">🔍 Produto parecido encontrado <button class="sheet-close" onclick="closeSimilar()">×</button></div>
+    <div class="sheet-body">
+      <div style="font-size:13px;color:var(--text-sec);margin-bottom:14px;line-height:1.5">
+        Já existe um item parecido na sua lista. O que deseja fazer?
+      </div>
+      <div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:10px">
+        <div style="font-size:11px;color:var(--text-sec);margin-bottom:4px">JÁ NA LISTA</div>
+        <div id="similar-existing-name" style="font-size:14px;font-weight:600"></div>
+      </div>
+      <div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:16px">
+        <div style="font-size:11px;color:var(--text-sec);margin-bottom:4px">VOCÊ DIGITOU</div>
+        <div id="similar-new-name" style="font-size:14px;font-weight:600"></div>
+      </div>
+      <div class="scan-actions">
+        <button class="action-btn full" onclick="confirmMergeSimilar()">✓ É o mesmo produto — somar</button>
+        <button class="action-btn" onclick="confirmNewSeparate()">＋ São diferentes — adicionar separado</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- EDITAR ITEM -->
+<div class="sheet-overlay" id="edit-sheet" onclick="if(event.target===this)closeEdit()">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">✏️ Editar produto <button class="sheet-close" onclick="closeEdit()">×</button></div>
+    <div class="sheet-body">
+      <div style="margin-bottom:12px">
+        <div style="font-size:12px;font-weight:600;color:var(--text-sec);margin-bottom:6px">NOME</div>
+        <input type="text" id="edit-name" style="width:100%;padding:11px 12px;border-radius:10px;border:0.5px solid var(--border);background:var(--bg);color:var(--text);font-size:15px">
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <div style="flex:1">
+          <div style="font-size:12px;font-weight:600;color:var(--text-sec);margin-bottom:6px">QUANTIDADE</div>
+          <input type="number" id="edit-qty" min="1" step="1" inputmode="numeric" style="width:100%;padding:11px 12px;border-radius:10px;border:0.5px solid var(--border);background:var(--bg);color:var(--text);font-size:15px" onfocus="this.select()">
+        </div>
+        <div style="flex:1">
+          <div style="font-size:12px;font-weight:600;color:var(--text-sec);margin-bottom:6px">PREÇO R$</div>
+          <input type="number" id="edit-price" min="0" step="0.01" inputmode="decimal" style="width:100%;padding:11px 12px;border-radius:10px;border:0.5px solid var(--border);background:var(--bg);color:var(--text);font-size:15px" onfocus="this.select()">
+        </div>
+      </div>
+      <div style="margin-bottom:16px">
+        <div style="font-size:12px;font-weight:600;color:var(--text-sec);margin-bottom:6px">CATEGORIA</div>
+        <select id="edit-cat" style="width:100%;padding:11px 12px;border-radius:10px;border:0.5px solid var(--border);background:var(--bg);color:var(--text);font-size:15px"></select>
+      </div>
+      <div class="scan-actions">
+        <button class="action-btn full" onclick="saveEdit()">✓ Salvar alterações</button>
+        <button class="action-btn" onclick="deleteFromEdit()" style="color:#e24b4a">🗑 Excluir produto</button>
       </div>
     </div>
   </div>
@@ -362,6 +472,7 @@ video { width: 100%; border-radius: var(--radius-sm); margin-bottom: 8px; displa
 
 <!-- SCANNER / CUPOM -->
 <div class="sheet-overlay" id="scan-sheet" onclick="if(event.target===this)closeScanner()">
+
   <div class="sheet">
     <div class="sheet-handle"></div>
     <div class="sheet-title">📄 Importar Cupom Fiscal <button class="sheet-close" onclick="closeScanner()">×</button></div>
@@ -428,19 +539,81 @@ function goToPrice(){
   setTimeout(()=>np.select(),80);
 }
 
+// Sistema de categorização com frases compostas (prioridade alta) e palavras simples (prioridade baixa)
+// Frases compostas são checadas primeiro e resolvem ambiguidades tipo "purê de batata" vs "batata"
 const CATS = {
-  'Hortifruti':{e:'🥦',k:['alface','tomate','batata','cebola','alho','cenoura','brocoli','espinafre','couve','pepino','abobrinha','pimentao','pimentão','limao','limão','laranja','banana','maca','maçã','uva','morango','manga','abacate','abacaxi','melao','melão','melancia','fruta','verdura','legume','salsa','cebolinha','coentro','beterraba','mandioca','aipim','milho','vagem']},
-  'Laticínios':{e:'🥛',k:['leite','queijo','iogurte','manteiga','creme de leite','requeijao','requeijão','nata','muçarela','mucarela','parmesao','parmesão','ricota','coalhada','chantilly','margarina']},
-  'Carnes e Frios':{e:'🥩',k:['carne','frango','peixe','linguiça','linguica','salsicha','bacon','presunto','mortadela','peito','costela','alcatra','file','filé','atum','sardinha','camarao','camarão','porco','patinho','hamburguer','picanha','sobrecoxa','coxa']},
-  'Padaria e Cereais':{e:'🍞',k:['pao','pão','torrada','bolo','biscoito','bolacha','cereal','granola','aveia','macarrao','macarrão','arroz','feijao','feijão','farinha','acucar','açúcar','sal','maizena','fuba','fubá','cuscuz','tapioca','lentilha']},
-  'Bebidas':{e:'🥤',k:['agua','água','suco','refrigerante','cerveja','vinho','cafe','café','cha','chá','energetico','energético','achocolatado','coca','pepsi','guarana','guaraná','soda','isotonico','isotônico']},
-  'Limpeza':{e:'🧹',k:['sabao','sabão','detergente','desinfetante','alvejante','amaciante','sanitaria','sanitária','multiuso','limpador','esponja','rodo','vassoura','pano','bucha','veja','omo','ariel','brilhante','ype','ypê']},
-  'Higiene':{e:'🧴',k:['shampoo','condicionador','sabonete','dental','pasta','fio dental','desodorante','perfume','absorvente','protetor','hidratante','lenco','lenço','papel higienico','papel toalha','cotonete','escova']},
-  'Congelados':{e:'🧊',k:['pizza','lasanha','nugget','sorvete','gelado','congelado','empanado']},
-  'Mercearia':{e:'🛒',k:[]}
+  'Hortifruti':{e:'🥦',
+    phrases:['batata doce','batata inglesa'],
+    k:['alface','tomate','cebola','alho','cenoura','brocoli','brócolis','espinafre','couve','pepino','abobrinha','pimentao','pimentão','limao','limão','laranja','banana','maca','maçã','uva','morango','mamao','mamão','melao','melão','melancia','salsa','cebolinha','coentro','beterraba','mandioca','aipim','vagem','rúcula','rucula','agrião','agriao','repolho','chuchu','quiabo','jiló','jilo','berinjela','abacate','manga','abacaxi','batata'],
+    excl:['purê','pure','chips','frito','frita','palha','sopa','sazon','desidratad']
+  },
+  'Laticínios':{e:'🥛',
+    phrases:['creme de leite','leite condensado','leite em pó','leite em po'],
+    k:['leite','queijo','iogurte','manteiga','requeijao','requeijão','nata','muçarela','mucarela','parmesao','parmesão','ricota','coalhada','chantilly','margarina','petit suisse','mussarela','provolone'],
+    excl:[]
+  },
+  'Carnes e Frios':{e:'🥩',
+    k:['carne','frango','peixe','linguiça','linguica','salsicha','bacon','presunto','mortadela','alcatra','file','filé','atum','sardinha','camarao','camarão','porco','patinho','hamburguer','picanha','sobrecoxa','coxa','tilapia','tilápia','salmao','salmão','peito de frango','costela','copa lombo','calabresa'],
+    excl:[]
+  },
+  'Padaria':{e:'🍞',
+    phrases:['pão de forma','pão frances','pão francês','pão de milho','pão integral','pão de queijo','pão doce','pão caseiro'],
+    k:['pao','pão','torrada','bolo','croissant','baguete','rosca','broa'],
+    excl:[]
+  },
+  'Mercearia':{e:'🛒',
+    phrases:['purê de batata','molho de tomate','extrato de tomate','creme de milho'],
+    k:['cereal','granola','aveia','macarrao','macarrão','arroz','feijao','feijão','farinha','acucar','açúcar','sal','maizena','fuba','fubá','cuscuz','tapioca','lentilha','grao de bico','grão de bico','biscoito','bolacha','molho','tempero','oleo','óleo','azeite','vinagre','ketchup','maionese','mostarda','enlatado','conserva','massa','lasanha seca','sazon','caldo','knorr','fermento'],
+    excl:[]
+  },
+  'Bebidas':{e:'🥤',
+    k:['agua','água','suco','refrigerante','cerveja','vinho','cafe','café','cha','chá','energetico','energético','achocolatado','coca','pepsi','guarana','guaraná','soda','isotonico','isotônico','nectar','néctar'],
+    excl:[]
+  },
+  'Limpeza':{e:'🧹',
+    k:['sabao','sabão','detergente','desinfetante','alvejante','amaciante','sanitaria','sanitária','multiuso','limpador','esponja','rodo','vassoura','pano','bucha','veja','omo','ariel','brilhante','ype','ypê','agua sanitaria','água sanitária','tira manchas','lustra movel','lustra móvel'],
+    excl:[]
+  },
+  'Higiene':{e:'🧴',
+    k:['shampoo','condicionador','sabonete','creme dental','pasta de dente','fio dental','desodorante','perfume','absorvente','protetor','hidratante','lenco','lenço','papel higienico','papel higiênico','papel toalha','cotonete','escova de dente','fralda','aparelho de barbear'],
+    excl:[]
+  },
+  'Congelados':{e:'🧊',
+    k:['pizza','lasanha congelada','nugget','sorvete','gelado','congelado','empanado','hamburguer congelado','batata congelada'],
+    excl:[]
+  },
+  'Outros':{e:'📦',phrases:[],k:[],excl:[]}
 };
 
-let items=[], collapsed={}, importCands=[], scanStream=null, calcStr='';
+function normalizeStr(s){
+  return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+
+function classify(name){
+  const n = normalizeStr(name);
+
+  // Passo 1: checa frases compostas primeiro (alta prioridade, resolve ambiguidades)
+  for(const [cat,d] of Object.entries(CATS)){
+    if(!d.phrases) continue;
+    for(const ph of d.phrases){
+      if(n.includes(normalizeStr(ph))) return cat;
+    }
+  }
+
+  // Passo 2: para cada categoria, verifica palavra-chave simples, mas só aceita
+  // se nenhuma palavra de exclusão daquela categoria estiver presente
+  for(const [cat,d] of Object.entries(CATS)){
+    if(cat==='Outros') continue;
+    for(const kw of d.k){
+      const k = normalizeStr(kw);
+      if(!n.includes(k)) continue;
+      const hasExclusion = (d.excl||[]).some(ex => n.includes(normalizeStr(ex)));
+      if(hasExclusion) continue;
+      return cat;
+    }
+  }
+  return 'Mercearia';
+}
 
 function load(){
   try{items=JSON.parse(localStorage.getItem('compras_v1')||'[]')}catch(e){items=[]}
@@ -454,29 +627,135 @@ function saveLocal(){
 }
 function save(){ saveAndSync(); }
 
-function classify(n){
-  const s=n.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-  for(const[cat,d]of Object.entries(CATS)){
-    if(cat==='Mercearia')continue;
-    for(const kw of d.k){const k=kw.normalize('NFD').replace(/[\u0300-\u036f]/g,'');if(s.includes(k))return cat}
-  }
-  return 'Mercearia';
+/* BUSCA POR SIMILARIDADE — detecta produtos parecidos mesmo com nomes diferentes */
+function tokenize(name){
+  const STOPWORDS = new Set(['de','da','do','das','dos','com','sem','e','a','o','un','kg','ml','lt','pct','cx']);
+  return normalizeStr(name)
+    .replace(/[^a-z0-9\s]/g,' ')
+    .split(/\s+/)
+    .filter(t => t.length>1 && !STOPWORDS.has(t));
 }
 
-function addItem(name,qty,price,done){
+function levenshtein(a,b){
+  const m=a.length,n=b.length;
+  if(m===0)return n; if(n===0)return m;
+  const dp=Array.from({length:m+1},()=>new Array(n+1).fill(0));
+  for(let i=0;i<=m;i++)dp[i][0]=i;
+  for(let j=0;j<=n;j++)dp[0][j]=j;
+  for(let i=1;i<=m;i++){
+    for(let j=1;j<=n;j++){
+      const cost = a[i-1]===b[j-1]?0:1;
+      dp[i][j]=Math.min(dp[i-1][j]+1, dp[i][j-1]+1, dp[i-1][j-1]+cost);
+    }
+  }
+  return dp[m][n];
+}
+
+// Similaridade 0-1: combina overlap de tokens (peso maior) com proximidade de string
+// Lida com abreviações de cupom fiscal tipo "MANT.S.NATA" = "Manteiga sem nata" via prefixo
+function tokensMatch(t1, t2){
+  if(t1===t2) return true;
+  if(t1.length>=4 && t2.length>=4 && levenshtein(t1,t2)<=1) return true;
+  // Abreviação por prefixo: "mant" combina com "manteiga", "italac" combina com "ital..."
+  const shorter = t1.length<t2.length?t1:t2, longer = t1.length<t2.length?t2:t1;
+  if(shorter.length>=3 && longer.startsWith(shorter)) return true;
+  return false;
+}
+
+function similarity(nameA, nameB){
+  const tokA = tokenize(nameA), tokB = tokenize(nameB);
+  if(tokA.length===0 || tokB.length===0) return 0;
+
+  const setA = new Set(tokA), setB = new Set(tokB);
+  let matchCount = 0;
+  for(const t of setA){
+    let found = false;
+    for(const t2 of setB){
+      if(tokensMatch(t,t2)){ found=true; break; }
+    }
+    if(found) matchCount++;
+  }
+  const tokenScore = matchCount / Math.max(setA.size, setB.size);
+
+  const strA = normalizeStr(nameA), strB = normalizeStr(nameB);
+  const maxLen = Math.max(strA.length, strB.length) || 1;
+  const editScore = 1 - (levenshtein(strA,strB) / maxLen);
+
+  return tokenScore*0.8 + editScore*0.2;
+}
+
+// Procura o melhor item existente parecido (retorna {item, score} ou null)
+function findSimilarItem(name, excludeDone){
+  let best=null, bestScore=0;
+  for(const item of items){
+    if(excludeDone && item.done) continue;
+    const s = similarity(name, item.name);
+    if(s > bestScore){ bestScore=s; best=item; }
+  }
+  if(best && bestScore >= 0.55) return {item:best, score:bestScore};
+  return null;
+}
+
+function addItem(name,qty,price,done,skipSimilarityCheck){
   const ni=document.getElementById('ni'),nq=document.getElementById('nq'),np=document.getElementById('np');
   name=name||(ni?ni.value.trim():'');
   qty=qty||parseFloat(nq?nq.value:1)||1;
   price=price!==undefined?price:(np&&np.value?parseFloat(np.value):null);
   if(!name){ni&&ni.focus();return}
+
   const ei=items.findIndex(i=>i.name.toLowerCase()===name.toLowerCase());
-  if(ei>=0){items[ei].qty+=qty;if(price!=null)items[ei].price=price}
-  else items.push({id:Date.now()+Math.random(),name,qty,price,done:!!done,cat:classify(name)});
+  if(ei>=0){
+    items[ei].qty+=qty;if(price!=null)items[ei].price=price;
+    finishAddItem(ni,nq,np);
+    return;
+  }
+
+  // Checa similaridade antes de criar um item totalmente novo (apenas para entrada manual)
+  if(!skipSimilarityCheck){
+    const match = findSimilarItem(name, false);
+    if(match){
+      pendingNewItem = {name,qty,price,done};
+      document.getElementById('similar-existing-name').textContent = match.item.name;
+      document.getElementById('similar-new-name').textContent = name;
+      document.getElementById('similar-sheet').classList.add('open');
+      return;
+    }
+  }
+
+  items.push({id:Date.now()+Math.random(),name,qty,price,done:!!done,cat:classify(name)});
+  finishAddItem(ni,nq,np);
+}
+
+function finishAddItem(ni,nq,np){
   if(nq)nq.value='1';
   if(np)np.value='';
   save();render();
   document.getElementById('subtitle').textContent='Atualizado agora';
   if(ni){ni.value='';setTimeout(()=>{ni.focus();window.scrollTo({top:0,behavior:'smooth'})},50);}
+}
+
+let pendingNewItem = null;
+function closeSimilar(){ document.getElementById('similar-sheet').classList.remove('open'); pendingNewItem=null; }
+function confirmMergeSimilar(){
+  if(!pendingNewItem) return;
+  const match = findSimilarItem(pendingNewItem.name, false);
+  if(match){
+    const idx = items.findIndex(i=>i.id===match.item.id);
+    if(idx>=0){
+      items[idx].qty += pendingNewItem.qty;
+      if(pendingNewItem.price!=null) items[idx].price = pendingNewItem.price;
+    }
+  }
+  save();render();
+  closeSimilar();
+  finishAddItem(document.getElementById('ni'),document.getElementById('nq'),document.getElementById('np'));
+}
+function confirmNewSeparate(){
+  if(!pendingNewItem) return;
+  const {name,qty,price,done} = pendingNewItem;
+  items.push({id:Date.now()+Math.random(),name,qty,price,done:!!done,cat:classify(name)});
+  closeSimilar();
+  finishAddItem(document.getElementById('ni'),document.getElementById('nq'),document.getElementById('np'));
 }
 
 function toggle(id){const i=items.find(x=>x.id===id);if(i){i.done=!i.done;save();render()}}
@@ -502,15 +781,120 @@ function render(){
     el.innerHTML=Object.entries(cats).map(([cat,ci])=>{
       const d=CATS[cat]||{e:'🛒'};
       const open=!collapsed[cat];
-      return`<div class="cat-section"><div class="cat-head" onclick="toggleCat('${cat}')"><span class="cat-icon">${d.e}</span><span class="cat-name">${cat}</span><span class="cat-badge">${ci.length}</span><span class="cat-chevron${open?' open':''}">▼</span></div>${open?`<div>${ci.map(item=>`<div class="item-row"><input type="checkbox" class="item-cb" ${item.done?'checked':''} onchange="toggle(${item.id})"><div class="item-name${item.done?' done':''}" style="flex:1">${item.name}${item.qty>1?` <small style="color:var(--text-muted)">${item.qty}x</small>`:''}</div><div class="item-meta">${item.price?fmt(item.price*item.qty):''}</div><button class="item-del" onclick="del(${item.id})">×</button></div>`).join('')}</div>`:''}</div>`;
+      return`<div class="cat-section"><div class="cat-head" onclick="toggleCat('${cat}')"><span class="cat-icon">${d.e}</span><span class="cat-name">${cat}</span><span class="cat-badge">${ci.length}</span><span class="cat-chevron${open?' open':''}">▼</span></div>${open?`<div>${ci.map(item=>`<div class="item-row"><input type="checkbox" class="item-cb" ${item.done?'checked':''} onchange="toggle(${item.id})"><div class="item-name${item.done?' done':''}" style="flex:1" onclick="openEdit(${item.id})">${item.name}${item.qty>1?`<span class="item-qty-badge">${item.qty}x</span>`:''}</div><div class="item-meta">${item.price?fmt(item.price*item.qty):''}</div><button class="item-edit" onclick="openEdit(${item.id})">✏️</button><button class="item-del" onclick="del(${item.id})">×</button></div>`).join('')}</div>`:''}</div>`;
     }).join('');
   }
 
   const ds=document.getElementById('done-section'),dl=document.getElementById('done-list');
   if(done.length>0){
     ds.style.display='block';
-    dl.innerHTML=done.map(i=>`<div class="done-item"><input type="checkbox" class="item-cb" checked onchange="toggle(${i.id})"><span style="flex:1;font-size:14px;text-decoration:line-through;color:var(--text-muted)">${i.name}${i.qty>1?` <small>${i.qty}x</small>`:''}</span><span style="font-size:12px;color:var(--text-sec)">${i.price?fmt(i.price*i.qty):''}</span><button class="item-del" onclick="del(${i.id})">×</button></div>`).join('');
+    dl.innerHTML=done.map(i=>`<div class="done-item"><input type="checkbox" class="item-cb" checked onchange="toggle(${i.id})"><span style="flex:1;font-size:14px;text-decoration:line-through;color:var(--text-muted)" onclick="openEdit(${i.id})">${i.name}${i.qty>1?`<span class="item-qty-badge" style="opacity:.6">${i.qty}x</span>`:''}</span><span style="font-size:12px;color:var(--text-sec)">${i.price?fmt(i.price*i.qty):''}</span><button class="item-edit" onclick="openEdit(${i.id})">✏️</button><button class="item-del" onclick="del(${i.id})">×</button></div>`).join('');
   }else{ds.style.display='none'}
+}
+
+/* EDITAR ITEM */
+let editingId = null;
+function openEdit(id){
+  const item = items.find(i=>i.id===id);
+  if(!item) return;
+  editingId = id;
+  document.getElementById('edit-name').value = item.name;
+  document.getElementById('edit-qty').value = item.qty;
+  document.getElementById('edit-price').value = item.price || '';
+  const sel = document.getElementById('edit-cat');
+  sel.innerHTML = Object.keys(CATS).map(c=>`<option value="${c}" ${c===item.cat?'selected':''}>${CATS[c].e} ${c}</option>`).join('');
+  document.getElementById('edit-sheet').classList.add('open');
+}
+function closeEdit(){
+  document.getElementById('edit-sheet').classList.remove('open');
+  editingId = null;
+}
+function saveEdit(){
+  if(editingId==null) return;
+  const item = items.find(i=>i.id===editingId);
+  if(!item) return;
+  const name = document.getElementById('edit-name').value.trim();
+  const qty = parseFloat(document.getElementById('edit-qty').value) || 1;
+  const priceVal = document.getElementById('edit-price').value;
+  const price = priceVal ? parseFloat(priceVal) : null;
+  const cat = document.getElementById('edit-cat').value;
+  if(!name){ alert('O nome não pode ficar vazio.'); return; }
+  item.name = name; item.qty = qty; item.price = price; item.cat = cat;
+  save(); render(); closeEdit();
+}
+function deleteFromEdit(){
+  if(editingId==null) return;
+  if(confirm('Excluir este produto da lista?')){
+    del(editingId);
+    closeEdit();
+  }
+}
+
+/* CALCULADORA: troca de aba */
+function switchCalcTab(tab){
+  const basicTab=document.getElementById('tab-basic'), unitTab=document.getElementById('tab-unit');
+  const basicPanel=document.getElementById('calc-basic-panel'), unitPanel=document.getElementById('calc-unit-panel');
+  if(tab==='basic'){
+    basicPanel.style.display='block'; unitPanel.style.display='none';
+    basicTab.style.background='var(--primary)'; basicTab.style.color='#fff';
+    unitTab.style.background='var(--bg)'; unitTab.style.color='var(--text)';
+  }else{
+    basicPanel.style.display='none'; unitPanel.style.display='block';
+    unitTab.style.background='var(--primary)'; unitTab.style.color='#fff';
+    basicTab.style.background='var(--bg)'; basicTab.style.color='var(--text)';
+  }
+}
+
+/* CALCULADORA: preço por kg/litro */
+function toBaseUnit(qty, unit){
+  // normaliza tudo para gramas ou ml (base 1000 = kg/L)
+  if(unit==='kg') return qty*1000;
+  if(unit==='l') return qty*1000;
+  return qty; // g ou ml já são base
+}
+function calcUnitPrice(){
+  const ap=parseFloat(document.getElementById('ua-price').value);
+  const aq=parseFloat(document.getElementById('ua-qty').value);
+  const au=document.getElementById('ua-unit').value;
+  const bp=parseFloat(document.getElementById('ub-price').value);
+  const bq=parseFloat(document.getElementById('ub-qty').value);
+  const bu=document.getElementById('ub-unit').value;
+
+  const aResEl=document.getElementById('ua-result'), bResEl=document.getElementById('ub-result');
+  const winnerEl=document.getElementById('unit-winner');
+
+  let aPerKg=null, bPerKg=null;
+  if(ap>0 && aq>0){
+    const base = toBaseUnit(aq, au);
+    aPerKg = (ap / base) * 1000;
+    const isVolume = au==='ml'||au==='l';
+    aResEl.textContent = `R$ ${aPerKg.toFixed(2).replace('.',',')} por ${isVolume?'litro':'kg'}`;
+  } else { aResEl.textContent=''; }
+
+  if(bp>0 && bq>0){
+    const base = toBaseUnit(bq, bu);
+    bPerKg = (bp / base) * 1000;
+    const isVolume = bu==='ml'||bu==='l';
+    bResEl.textContent = `R$ ${bPerKg.toFixed(2).replace('.',',')} por ${isVolume?'litro':'kg'}`;
+  } else { bResEl.textContent=''; }
+
+  if(aPerKg!=null && bPerKg!=null){
+    winnerEl.style.display='block';
+    const diff = Math.abs(aPerKg-bPerKg);
+    const diffPct = (diff/Math.max(aPerKg,bPerKg)*100).toFixed(0);
+    if(aPerKg < bPerKg){
+      winnerEl.style.background='#EAF3DE'; winnerEl.style.color='#27500A';
+      winnerEl.textContent = `🏆 Produto A é mais vantajoso (${diffPct}% mais barato por unidade)`;
+    } else if(bPerKg < aPerKg){
+      winnerEl.style.background='#EAF3DE'; winnerEl.style.color='#27500A';
+      winnerEl.textContent = `🏆 Produto B é mais vantajoso (${diffPct}% mais barato por unidade)`;
+    } else {
+      winnerEl.style.background='var(--bg)'; winnerEl.style.color='var(--text)';
+      winnerEl.textContent = `Empate — mesmo preço por unidade`;
+    }
+  } else {
+    winnerEl.style.display='none';
+  }
 }
 
 /* CALC */
@@ -606,11 +990,12 @@ async function fetchCupom(url){
     if(!r.ok||!data.success){setStatus('err','❌ '+(data.error||'Erro')+(data.detail?'<br><small>'+data.detail+'</small>':''));return}
     const{info,items:fi}=data;
     importCands=fi.map(item=>{
-      const ex=items.find(i=>i.name.toLowerCase()===item.name.toLowerCase());
-      return{...item,isNew:!ex,selected:true,exId:ex?ex.id:null};
+      // Busca por similaridade (nomes de cupom fiscal são abreviados, ex: "LEITE L.V.ITALAC.INT")
+      const match=findSimilarItem(item.name, false);
+      return{...item,isNew:!match,selected:true,exId:match?match.item.id:null,matchName:match?match.item.name:null,matchScore:match?match.score:0};
     });
     document.getElementById('imp-info').innerHTML=info.store?`<b>${info.store}</b>${info.date?' · '+info.date:''}${info.total?' · R$ '+info.total.toFixed(2).replace('.',','):''}`:fi.length+' produto(s) encontrado(s)';
-    document.getElementById('imp-list').innerHTML=importCands.map((item,idx)=>`<div class="imp-item"><input type="checkbox" ${item.selected?'checked':''} id="ic${idx}" onchange="importCands[${idx}].selected=this.checked"><span class="imp-name">${item.name}${item.qty>1?' <small style=\'color:var(--text-muted)\'>'+item.qty+'x</small>':''}</span><span class="badge ${item.isNew?'badge-new':'badge-match'}">${item.isNew?'Novo':'Lista'}</span><span class="imp-price">${item.price?fmt(item.price):''}</span></div>`).join('');
+    document.getElementById('imp-list').innerHTML=importCands.map((item,idx)=>`<div class="imp-item"><input type="checkbox" ${item.selected?'checked':''} id="ic${idx}" onchange="importCands[${idx}].selected=this.checked"><span class="imp-name">${item.name}${item.qty>1?' <small style=\'color:var(--text-muted)\'>'+item.qty+'x</small>':''}${item.matchName?`<br><small style="color:var(--text-muted)">↳ combina com "${item.matchName}"</small>`:''}</span><span class="badge ${item.isNew?'badge-new':'badge-match'}">${item.isNew?'Novo':'Combina'}</span><span class="imp-price">${item.price?fmt(item.price):''}</span></div>`).join('');
     setStatus('ok','✅ '+fi.length+' produto(s) encontrado(s). Revise e confirme.');
     document.getElementById('imp-wrap').style.display='block';
   }catch(e){setStatus('err','❌ Erro: '+e.message+'<br><small>Verifique se o proxy está online.</small>')}
@@ -624,7 +1009,7 @@ function toggleAll(){
 function confirmImport(){
   let added=0,matched=0;
   importCands.filter(i=>i.selected).forEach(item=>{
-    if(item.isNew){addItem(item.name,item.qty,item.price,true);added++}
+    if(item.isNew){addItem(item.name,item.qty,item.price,true,true);added++}
     else{const ei=items.findIndex(i=>i.id===item.exId);if(ei>=0){items[ei].done=true;if(item.price)items[ei].price=item.price;matched++}}
   });
   save();render();closeScanner();
@@ -862,6 +1247,8 @@ load();render();
 window.addEventListener('popstate',()=>{
   if(document.getElementById('calc-sheet').classList.contains('open')){closeCalc();history.pushState(null,'','')}
   else if(document.getElementById('scan-sheet').classList.contains('open')){closeScanner();history.pushState(null,'','')}
+  else if(document.getElementById('edit-sheet').classList.contains('open')){closeEdit();history.pushState(null,'','')}
+  else if(document.getElementById('similar-sheet').classList.contains('open')){closeSimilar();history.pushState(null,'','')}
 });
 history.pushState(null,'','');
 </script>
