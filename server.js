@@ -118,11 +118,15 @@ function parseNFCe(html) {
     const totalMatch = rowText.match(/Vl\.?\s*Total\.?:?\s*([\d.,]+)/i) || rowText.match(/([\d]{1,3}(?:\.\d{3})*,\d{2})\s*$/);
     let total = totalMatch ? parseFloat(totalMatch[1].replace(/\./g, '').replace(',', '.')) : null;
 
-    // Se não achou total mas achou unit+qty, calcula
-    if (!total && unitPrice && qty) total = Math.round(unitPrice * qty * 100) / 100;
-    // Se não achou unit mas achou total, usa o total como preço (qty=1 fallback)
-    const finalPrice = total || unitPrice || null;
     const finalQty = qty || 1;
+
+    // O app SEMPRE multiplica price × qty na exibição, então o campo "price" precisa
+    // ser o valor UNITÁRIO, nunca o total. Prioridade: unitPrice extraído diretamente;
+    // se não achou, calcula a partir do total ÷ quantidade.
+    let finalPrice = unitPrice;
+    if (finalPrice == null && total != null && finalQty > 0) {
+      finalPrice = Math.round((total / finalQty) * 100) / 100;
+    }
 
     if (name && name.length > 2 && name.length < 100 && !/total a pagar|forma de pagamento|tributos totais/i.test(name)) {
       items.push({ name: cleanName(name), qty: finalQty, price: finalPrice });
