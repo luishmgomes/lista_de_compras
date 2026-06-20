@@ -672,15 +672,28 @@ function levenshtein(a,b){
 
 // Similaridade 0-1: combina overlap de tokens (peso maior) com proximidade de string
 // Lida com abreviações de cupom fiscal tipo "MANT.S.NATA" = "Manteiga sem nata" via prefixo
-function tokensMatch(t1, t2){
-  if(t1===t2) return true;
-  if(t1.length>=4 && t2.length>=4 && levenshtein(t1,t2)<=1) return true;
-  // Abreviação por prefixo: "mant" combina com "manteiga", "cr" combina com "creme"
+// Retorna: 'strong' (provavelmente o mesmo termo, ex: typo "capuccino"~"cappuccino"),
+// 'weak' (abreviação por prefixo curto, ex: "cr"~"creme" ou "sal"~"salsicha" — ambíguo),
+// ou null (sem relação)
+function tokenMatchStrength(t1, t2){
+  if(t1===t2) return 'strong';
+  // Correção de erro de digitação: palavras de tamanho parecido com 1 letra de diferença
+  if(t1.length>=4 && t2.length>=4){
+    const lenDiff = Math.abs(t1.length - t2.length);
+    if(lenDiff<=2 && levenshtein(t1,t2)<=1) return 'strong';
+  }
+  // Abreviação por prefixo: a palavra curta é o início exato da longa
   const shorter = t1.length<t2.length?t1:t2, longer = t1.length<t2.length?t2:t1;
-  // Prefixo de 2 letras só conta se a palavra mais longa tiver pelo menos 4 letras
-  // (evita "cr" combinar com qualquer coisa começando com c-r por acaso)
-  if(shorter.length>=2 && longer.length>=4 && longer.startsWith(shorter)) return true;
-  return false;
+  if(shorter.length>=2 && longer.length>=4 && longer.startsWith(shorter)){
+    // Prefixo de 4+ letras é confiável ("mant"->"manteiga"). Prefixo de 2-3 letras é
+    // arriscado ("sal"->"salsicha", "cr"->"creme") então conta como match fraco.
+    return shorter.length>=4 ? 'strong' : 'weak';
+  }
+  return null;
+}
+
+function tokensMatch(t1, t2){
+  return tokenMatchStrength(t1,t2) !== null;
 }
 
 // Tokens "extras" que aparecem só em um dos nomes (ex: marca) não devem penalizar muito
@@ -690,21 +703,19 @@ function similarity(nameA, nameB){
   if(tokA.length===0 || tokB.length===0) return 0;
 
   const setA = new Set(tokA), setB = new Set(tokB);
-  let matchCount = 0;
+  let matchScore = 0; // soma ponderada: strong=1, weak=0.5
   for(const t of setA){
-    let found = false;
+    let best = 0;
     for(const t2 of setB){
-      if(tokensMatch(t,t2)){ found=true; break; }
+      const strength = tokenMatchStrength(t,t2);
+      if(strength==='strong'){ best=1; break; }
+      if(strength==='weak' && best<0.5) best=0.5;
     }
-    if(found) matchCount++;
+    matchScore += best;
   }
-  // Média harmônica entre cobertura do menor e do maior conjunto: recompensa quando
-  // os termos abreviados batem (caso "CR.LEITE" vs "Creme de Leite"), mas não deixa
-  // nomes genéricos de 1 palavra ("Sal") combinarem com qualquer coisa que comece igual
-  // ("Salsicha"), pois aí a cobertura do conjunto MAIOR cairia muito.
-  const scoreMin = matchCount / Math.min(setA.size, setB.size);
-  const scoreMax = matchCount / Math.max(setA.size, setB.size);
-  const tokenScore = (2*scoreMin*scoreMax) / (scoreMin+scoreMax || 1);
+  const scoreMin = matchScore / Math.min(setA.size, setB.size);
+  const scoreMax = matchScore / Math.max(setA.size, setB.size);
+  const tokenScore = scoreMin*0.7 + scoreMax*0.3;
 
   const strA = normalizeStr(nameA), strB = normalizeStr(nameB);
   const maxLen = Math.max(strA.length, strB.length) || 1;
@@ -712,9 +723,8 @@ function similarity(nameA, nameB){
 
   let result = tokenScore*0.8 + editScore*0.2;
 
-  // Nomes com apenas 1 token de cada lado (muito genéricos, ex: "Sal", "Leite") precisam
-  // de correspondência muito forte (quase igual) para evitar falsos positivos perigosos
-  if(setA.size===1 && setB.size===1 && tokA[0]!==tokB[0]){
+  // Nomes com apenas 1 token de cada lado, sem nenhum match (mesmo fraco), recebem penalidade
+  if(setA.size===1 && setB.size===1 && matchScore===0){
     result = result * 0.5;
   }
 
