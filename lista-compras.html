@@ -336,6 +336,22 @@ video { width: 100%; border-radius: var(--radius-sm); margin-bottom: 8px; displa
   <button class="fab fab-primary" onclick="document.getElementById('ni').focus();window.scrollTo(0,0)" aria-label="Novo item" title="Novo item">＋</button>
 </div>
 
+<!-- MENU DE SINCRONIZAÇÃO -->
+<div class="sheet-overlay" id="sync-sheet" onclick="if(event.target===this)closeSyncMenu()">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">☁️ Google Sheets <button class="sheet-close" onclick="closeSyncMenu()">×</button></div>
+    <div class="sheet-body">
+      <div style="font-size:13px;color:var(--text-sec);margin-bottom:16px;line-height:1.5" id="sync-menu-info">Conectado e sincronizando.</div>
+      <div class="scan-actions">
+        <button class="action-btn full" onclick="closeSyncMenu();forceResync()">🔄 Forçar sincronização (corrige duplicatas)</button>
+        <button class="action-btn" onclick="closeSyncMenu();disconnectSheets()" style="color:#e24b4a">🔌 Desconectar do Google Sheets</button>
+        <button class="action-btn" onclick="closeSyncMenu()">✕ Cancelar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- CALCULADORA -->
 <div class="sheet-overlay" id="calc-sheet" onclick="if(event.target===this)closeCalc()">
   <div class="sheet">
@@ -1201,16 +1217,19 @@ function updateSyncBtn(){
 
 function handleSyncBtn(){
   if(getToken()){
-    const choice = confirm('Forçar nova sincronização? Isso vai limpar a planilha e reescrever com os dados atuais do app (corrige duplicatas).\n\nClique OK para sincronizar, ou Cancelar para ver outras opções.');
-    if(choice){
-      forceResync();
-    } else if(confirm('Desconectar do Google Sheets? Os dados locais não serão apagados.')){
-      clearToken();
-      updateSyncBtn();
-      document.getElementById('subtitle').textContent = 'Desconectado do Google Sheets';
-    }
+    document.getElementById('sync-sheet').classList.add('open');
   } else {
     startOAuth();
+  }
+}
+function closeSyncMenu(){
+  document.getElementById('sync-sheet').classList.remove('open');
+}
+function disconnectSheets(){
+  if(confirm('Desconectar do Google Sheets? Os dados locais não serão apagados.')){
+    clearToken();
+    updateSyncBtn();
+    document.getElementById('subtitle').textContent = 'Desconectado do Google Sheets';
   }
 }
 
@@ -1444,6 +1463,7 @@ window.addEventListener('popstate',()=>{
   else if(document.getElementById('scan-sheet').classList.contains('open')){closeScanner();history.pushState(null,'','')}
   else if(document.getElementById('edit-sheet').classList.contains('open')){closeEdit();history.pushState(null,'','')}
   else if(document.getElementById('similar-sheet').classList.contains('open')){closeSimilar();history.pushState(null,'','')}
+  else if(document.getElementById('sync-sheet').classList.contains('open')){closeSyncMenu();history.pushState(null,'','')}
 });
 history.pushState(null,'','');
 </script>
