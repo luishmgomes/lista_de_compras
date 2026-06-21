@@ -87,14 +87,8 @@ html, body { height: 100%; background: var(--bg); font-family: -apple-system, 'S
   -webkit-appearance: none;
 }
 .add-row input:focus { outline: none; border-color: var(--primary); }
-.qty-inp { width: 58px !important; flex: none !important; text-align: center; }
-.price-inp { width: 76px !important; flex: none !important; }
-.add-btn {
-  padding: 10px 14px; border-radius: var(--radius-sm);
-  background: var(--primary); color: #fff; border: none;
-  font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center;
-}
-.add-btn:active { background: var(--primary-dark); transform: scale(0.95); }
+.qty-inp { width: 56px !important; flex: none !important; text-align: center; }
+.price-inp { width: 92px !important; flex: none !important; text-align: right; }
 
 /* LIST */
 .list-body { padding: 10px 16px; padding-bottom: calc(80px + var(--safe-bottom)); }
@@ -275,7 +269,7 @@ video { width: 100%; border-radius: var(--radius-sm); margin-bottom: 8px; displa
 
 <div class="header">
   <div class="header-title">
-    <h1>🛒 Lista de Compras <span style="font-size:11px;font-weight:400;color:var(--text-muted);vertical-align:middle">v1.2</span></h1>
+    <h1>🛒 Lista de Compras <span style="font-size:11px;font-weight:400;color:var(--text-muted);vertical-align:middle">v1.3</span></h1>
     <p id="subtitle">Pronto para adicionar itens</p>
   </div>
   <button class="icon-btn" onclick="openScanner()" aria-label="Importar cupom fiscal" title="Cupom fiscal">📷</button>
@@ -319,7 +313,6 @@ video { width: 100%; border-radius: var(--radius-sm); margin-bottom: 8px; displa
       onclick="this.select()"
       onkeydown="if(event.key==='Enter'){event.preventDefault();addItem();}"
       onkeyup="if(event.key==='Enter'){event.preventDefault();}">
-    <button class="add-btn" onclick="addItem()" aria-label="Adicionar">＋</button>
   </div>
 </div>
 
