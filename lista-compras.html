@@ -270,7 +270,7 @@ video { width: 100%; border-radius: var(--radius-sm); margin-bottom: 8px; displa
 
 <div class="header">
   <div class="header-title">
-    <h1>🛒 Lista de Compras <span style="font-size:11px;font-weight:400;color:var(--text-muted);vertical-align:middle">v1.5</span></h1>
+    <h1>🛒 Lista de Compras <span style="font-size:11px;font-weight:400;color:var(--text-muted);vertical-align:middle">v1.6</span></h1>
     <p id="subtitle">Pronto para adicionar itens</p>
   </div>
   <button class="icon-btn" onclick="openScanner()" aria-label="Importar cupom fiscal" title="Cupom fiscal">📷</button>
@@ -906,7 +906,10 @@ function render(){
   const pend=visibleItems.filter(i=>!i.done),done=visibleItems.filter(i=>i.done);
   document.getElementById('sp').textContent=pend.length;
   document.getElementById('sd').textContent=done.length;
-  const tot=visibleItems.reduce((s,i)=>s+(i.price?i.price*i.qty:0),0);
+  // Estimativa = soma só dos itens AINDA NÃO comprados. Assim, ao marcar itens no
+  // carrinho durante a compra, o valor não muda a cada toque — só cai quando o item
+  // realmente sai da lista de pendentes. Se tudo foi comprado, fica R$ 0,00.
+  const tot=pend.reduce((s,i)=>s+(i.price?i.price*i.qty:0),0);
   document.getElementById('st').textContent=tot>0?'R$ '+tot.toFixed(2).replace('.',','):'R$ 0,00';
 
   const cats={};
