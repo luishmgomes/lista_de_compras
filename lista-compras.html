@@ -275,7 +275,7 @@ video { width: 100%; border-radius: var(--radius-sm); margin-bottom: 8px; displa
 
 <div class="header">
   <div class="header-title">
-    <h1>🛒 Lista de Compras <span style="font-size:11px;font-weight:400;color:var(--text-muted);vertical-align:middle">v1.0</span></h1>
+    <h1>🛒 Lista de Compras <span style="font-size:11px;font-weight:400;color:var(--text-muted);vertical-align:middle">v1.2</span></h1>
     <p id="subtitle">Pronto para adicionar itens</p>
   </div>
   <button class="icon-btn" onclick="openScanner()" aria-label="Importar cupom fiscal" title="Cupom fiscal">📷</button>
@@ -321,6 +321,10 @@ video { width: 100%; border-radius: var(--radius-sm); margin-bottom: 8px; displa
       onkeyup="if(event.key==='Enter'){event.preventDefault();}">
     <button class="add-btn" onclick="addItem()" aria-label="Adicionar">＋</button>
   </div>
+</div>
+
+<div id="store-filter-bar" style="display:none;padding:8px 16px 0">
+  <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px" id="store-filter-chips"></div>
 </div>
 
 <div class="list-body">
@@ -475,7 +479,7 @@ video { width: 100%; border-radius: var(--radius-sm); margin-bottom: 8px; displa
           <input type="number" id="edit-price" min="0" step="0.01" inputmode="decimal" style="width:100%;padding:11px 12px;border-radius:10px;border:0.5px solid var(--border);background:var(--bg);color:var(--text);font-size:15px" onfocus="this.select()">
         </div>
       </div>
-      <div id="edit-price-history" style="display:none;margin-bottom:12px;font-size:12px;color:var(--text-sec)"></div>
+      <div id="edit-price-history" style="display:none;margin-bottom:16px"></div>
       <div style="margin-bottom:16px">
         <div style="font-size:12px;font-weight:600;color:var(--text-sec);margin-bottom:6px">CATEGORIA</div>
         <select id="edit-cat" style="width:100%;padding:11px 12px;border-radius:10px;border:0.5px solid var(--border);background:var(--bg);color:var(--text);font-size:15px"></select>
@@ -483,6 +487,24 @@ video { width: 100%; border-radius: var(--radius-sm); margin-bottom: 8px; displa
       <div class="scan-actions">
         <button class="action-btn full" onclick="saveEdit()">✓ Salvar alterações</button>
         <button class="action-btn" onclick="deleteFromEdit()" style="color:#e24b4a">🗑 Excluir produto</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRMAR MERCADO -->
+<div class="sheet-overlay" id="store-confirm-sheet" onclick="if(event.target===this)closeStoreConfirm()">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">🏪 Qual mercado? <button class="sheet-close" onclick="closeStoreConfirm()">×</button></div>
+    <div class="sheet-body">
+      <div style="font-size:13px;color:var(--text-sec);margin-bottom:14px;line-height:1.5">
+        Confirme ou edite o nome do mercado antes de importar — isso ajuda a comparar preços entre lugares diferentes.
+      </div>
+      <div id="store-confirm-meta" style="font-size:12px;color:var(--text-muted);margin-bottom:8px"></div>
+      <input type="text" id="store-confirm-input" placeholder="Nome do mercado" style="width:100%;padding:12px 14px;border-radius:10px;border:0.5px solid var(--border);background:var(--bg);color:var(--text);font-size:15px;margin-bottom:16px">
+      <div class="scan-actions">
+        <button class="action-btn full" onclick="confirmStoreAndShowItems()">✓ Continuar</button>
       </div>
     </div>
   </div>
@@ -743,19 +765,35 @@ function findSimilarItem(name, excludeDone){
   return null;
 }
 
-/* HISTÓRICO DE PREÇOS */
-function addPriceHistory(item, price){
+/* HISTÓRICO DE PREÇOS (com mercado) */
+function addPriceHistory(item, price, store){
   if(price==null) return;
   if(!item.priceHistory) item.priceHistory = [];
-  item.priceHistory.push({price, date: new Date().toISOString()});
+  item.priceHistory.push({price, date: new Date().toISOString(), store: store || null});
   if(item.priceHistory.length > 20) item.priceHistory = item.priceHistory.slice(-20); // mantém só os últimos 20
+  if(store){
+    if(!item.lastStore) item.lastStore = store;
+    item.lastStore = store;
+  }
 }
 
-function setItemPrice(item, newPrice){
+function setItemPrice(item, newPrice, store){
   if(newPrice!=null && newPrice !== item.price){
-    addPriceHistory(item, newPrice);
+    addPriceHistory(item, newPrice, store);
+  } else if(newPrice!=null && store){
+    item.lastStore = store;
   }
   item.price = newPrice;
+}
+
+// Retorna {price, store} do menor preço já registrado para este item, ou null
+function getBestPrice(item){
+  if(!item.priceHistory || item.priceHistory.length===0) return null;
+  const withStore = item.priceHistory.filter(h=>h.store);
+  const pool = withStore.length>0 ? withStore : item.priceHistory;
+  let best = pool[0];
+  for(const h of pool){ if(h.price < best.price) best = h; }
+  return best.store ? best : null;
 }
 
 function addItem(name,qty,price,done,skipSimilarityCheck){
@@ -827,11 +865,53 @@ function toggleCat(c){collapsed[c]=!collapsed[c];try{localStorage.setItem('compr
 
 function fmt(p){return p!=null?'R$ '+p.toFixed(2).replace('.',','):''}
 
+let activeStoreFilter = null; // null = sem filtro
+
+function getAllKnownStores(){
+  const stores = new Set();
+  for(const item of items){
+    if(item.priceHistory){
+      for(const h of item.priceHistory){
+        if(h.store) stores.add(h.store);
+      }
+    }
+  }
+  return Array.from(stores).sort();
+}
+
+function itemBoughtAtStore(item, store){
+  if(!item.priceHistory) return false;
+  return item.priceHistory.some(h=>h.store===store);
+}
+
+function renderStoreFilterBar(){
+  const stores = getAllKnownStores();
+  const bar = document.getElementById('store-filter-bar');
+  const chips = document.getElementById('store-filter-chips');
+  if(stores.length===0){ bar.style.display='none'; activeStoreFilter=null; return; }
+  bar.style.display='block';
+  const allChip = `<button onclick="setStoreFilter(null)" style="flex-shrink:0;font-size:12px;font-weight:600;padding:6px 12px;border-radius:20px;border:0.5px solid var(--border);background:${activeStoreFilter===null?'var(--primary)':'var(--card)'};color:${activeStoreFilter===null?'#fff':'var(--text-sec)'};cursor:pointer;white-space:nowrap">Todos</button>`;
+  const storeChips = stores.map(s=>`<button onclick="setStoreFilter('${s.replace(/'/g,"\\'")}')" style="flex-shrink:0;font-size:12px;font-weight:600;padding:6px 12px;border-radius:20px;border:0.5px solid var(--border);background:${activeStoreFilter===s?'var(--primary)':'var(--card)'};color:${activeStoreFilter===s?'#fff':'var(--text-sec)'};cursor:pointer;white-space:nowrap">🏪 ${s}</button>`).join('');
+  chips.innerHTML = allChip + storeChips;
+}
+
+function setStoreFilter(store){
+  activeStoreFilter = store;
+  renderStoreFilterBar();
+  render();
+}
+
 function render(){
-  const pend=items.filter(i=>!i.done),done=items.filter(i=>i.done);
+  renderStoreFilterBar();
+  let visibleItems = items;
+  if(activeStoreFilter){
+    visibleItems = items.filter(i=>itemBoughtAtStore(i, activeStoreFilter));
+  }
+
+  const pend=visibleItems.filter(i=>!i.done),done=visibleItems.filter(i=>i.done);
   document.getElementById('sp').textContent=pend.length;
   document.getElementById('sd').textContent=done.length;
-  const tot=items.reduce((s,i)=>s+(i.price?i.price*i.qty:0),0);
+  const tot=visibleItems.reduce((s,i)=>s+(i.price?i.price*i.qty:0),0);
   document.getElementById('st').textContent=tot>0?'R$ '+tot.toFixed(2).replace('.',','):'R$ 0,00';
 
   const cats={};
@@ -839,7 +919,8 @@ function render(){
 
   const el=document.getElementById('list');
   if(pend.length===0){
-    el.innerHTML='<div class="empty-state"><span class="empty-icon">✅</span>Tudo comprado!<br>Adicione itens para a próxima compra.</div>';
+    const msg = activeStoreFilter ? `Nenhum produto comprado em "${activeStoreFilter}" pendente.` : 'Tudo comprado!<br>Adicione itens para a próxima compra.';
+    el.innerHTML=`<div class="empty-state"><span class="empty-icon">✅</span>${msg}</div>`;
   }else{
     el.innerHTML=Object.entries(cats).map(([cat,ci])=>{
       const d=CATS[cat]||{e:'🛒'};
@@ -878,13 +959,77 @@ function closeEdit(){
 function renderPriceHistory(item){
   const box = document.getElementById('edit-price-history');
   if(!item.priceHistory || item.priceHistory.length===0){ box.style.display='none'; return; }
-  const recent = item.priceHistory.slice(-5).reverse();
+
+  const hist = item.priceHistory.slice(-10); // últimos 10 registros
   box.style.display = 'block';
-  box.innerHTML = '<b>Histórico de preços:</b> ' + recent.map(h=>{
+
+  const best = getBestPrice(item);
+  const bestBadge = best ? `<div style="background:#EAF3DE;color:#27500A;border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:12px;display:flex;align-items:center;gap:6px"><span>🏆</span><span><b>Mais barato em ${best.store}</b> — R$ ${best.price.toFixed(2).replace('.',',')}</span></div>` : '';
+
+  if(hist.length === 1){
+    // Só um registro: mostra texto simples, gráfico não faz sentido
+    const h = hist[0];
     const d = new Date(h.date);
-    const dateStr = d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
-    return `R$ ${h.price.toFixed(2).replace('.',',')} (${dateStr})`;
-  }).join(' · ');
+    box.innerHTML = bestBadge + `<div style="font-size:12px;color:var(--text-sec)"><b>Histórico de preços:</b> R$ ${h.price.toFixed(2).replace('.',',')} (${d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}${h.store?' · '+h.store:''})</div>`;
+    return;
+  }
+
+  const prices = hist.map(h=>h.price);
+  const min = Math.min(...prices), max = Math.max(...prices);
+  const range = (max-min) || 1;
+  const W = 280, H = 80, PAD = 10;
+  const stepX = hist.length>1 ? (W-PAD*2)/(hist.length-1) : 0;
+
+  const points = hist.map((h,i)=>{
+    const x = PAD + i*stepX;
+    const y = H - PAD - ((h.price-min)/range)*(H-PAD*2);
+    return {x,y,price:h.price,date:h.date,store:h.store};
+  });
+
+  const pathD = points.map((p,i)=>(i===0?'M':'L')+p.x.toFixed(1)+','+p.y.toFixed(1)).join(' ');
+  const areaD = pathD + ` L${points[points.length-1].x.toFixed(1)},${H-PAD} L${points[0].x.toFixed(1)},${H-PAD} Z`;
+
+  const first = prices[0], last = prices[prices.length-1];
+  const trend = last>first ? 'up' : last<first ? 'down' : 'flat';
+  const trendPct = first>0 ? Math.abs(((last-first)/first)*100).toFixed(0) : 0;
+  const trendColor = trend==='up' ? '#e24b4a' : trend==='down' ? '#1D9E75' : 'var(--text-sec)';
+  const trendIcon = trend==='up' ? '↑' : trend==='down' ? '↓' : '→';
+  const trendLabel = trend==='up' ? `${trendPct}% mais caro` : trend==='down' ? `${trendPct}% mais barato` : 'Sem variação';
+
+  const dotsD = points.map((p,i)=>{
+    const isLast = i===points.length-1;
+    return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${isLast?4:2.5}" fill="${isLast?'var(--primary)':'var(--text-muted)'}"/>`;
+  }).join('');
+
+  box.innerHTML = bestBadge + `
+    <div style="font-size:12px;font-weight:600;color:var(--text-sec);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">
+      <span>HISTÓRICO DE PREÇOS</span>
+      <span style="color:${trendColor};font-weight:700">${trendIcon} ${trendLabel}</span>
+    </div>
+    <div style="background:var(--bg);border-radius:10px;padding:10px">
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;display:block">
+        <defs>
+          <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="var(--primary)" stop-opacity="0.25"/>
+            <stop offset="100%" stop-color="var(--primary)" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <path d="${areaD}" fill="url(#priceGrad)"/>
+        <path d="${pathD}" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+        ${dotsD}
+      </svg>
+      <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--text-muted)">
+        <span>${new Date(hist[0].date).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}</span>
+        <span>${new Date(hist[hist.length-1].date).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+      ${hist.slice(-5).reverse().map(h=>{
+        const d = new Date(h.date);
+        return `<span style="font-size:11px;background:var(--bg);padding:3px 8px;border-radius:10px;color:var(--text-sec)">R$ ${h.price.toFixed(2).replace('.',',')} · ${d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}${h.store?' · '+h.store:''}</span>`;
+      }).join('')}
+    </div>
+  `;
 }
 
 // Avisa se o nome digitado na edição parece com outro produto já existente na lista
@@ -1120,11 +1265,31 @@ async function fetchCupom(url){
         useExistingName: !!match // por padrão, se achou match, usa o nome que já está na lista
       };
     });
-    document.getElementById('imp-info').innerHTML=info.store?`<b>${info.store}</b>${info.date?' · '+info.date:''}${info.total?' · R$ '+info.total.toFixed(2).replace('.',','):''}`:fi.length+' produto(s) encontrado(s)';
-    renderImportList();
-    setStatus('ok','✅ '+fi.length+' produto(s) encontrado(s). Revise e confirme.');
-    document.getElementById('imp-wrap').style.display='block';
+    pendingStoreName = info.store || '';
+    pendingStoreDate = info.date || '';
+    pendingStoreTotal = info.total || null;
+    setStatus('ok','✅ '+fi.length+' produto(s) encontrado(s).');
+    document.getElementById('imp-wrap').style.display='none';
+    openStoreConfirm();
   }catch(e){setStatus('err','❌ Erro: '+e.message+'<br><small>Verifique se o proxy está online.</small>')}
+}
+
+let pendingStoreName='', pendingStoreDate='', pendingStoreTotal=null;
+function openStoreConfirm(){
+  document.getElementById('store-confirm-input').value = pendingStoreName;
+  document.getElementById('store-confirm-meta').textContent = [pendingStoreDate, pendingStoreTotal?('R$ '+pendingStoreTotal.toFixed(2).replace('.',',')):''].filter(Boolean).join(' · ');
+  document.getElementById('store-confirm-sheet').classList.add('open');
+  setTimeout(()=>document.getElementById('store-confirm-input').focus(),200);
+}
+function closeStoreConfirm(){
+  document.getElementById('store-confirm-sheet').classList.remove('open');
+}
+function confirmStoreAndShowItems(){
+  pendingStoreName = document.getElementById('store-confirm-input').value.trim();
+  closeStoreConfirm();
+  document.getElementById('imp-info').innerHTML = pendingStoreName?`<b>${pendingStoreName}</b>${pendingStoreDate?' · '+pendingStoreDate:''}${pendingStoreTotal?' · R$ '+pendingStoreTotal.toFixed(2).replace('.',','):''}`:importCands.length+' produto(s) encontrado(s)';
+  renderImportList();
+  document.getElementById('imp-wrap').style.display='block';
 }
 
 function renderImportList(){
@@ -1172,13 +1337,17 @@ function confirmImport(){
   importCands.filter(i=>i.selected).forEach(item=>{
     if(item.isNew){
       addItem(item.name,item.qty,item.price,true,true);
+      if(item.price!=null && pendingStoreName){
+        const newItem = items[items.length-1];
+        addPriceHistory(newItem, item.price, pendingStoreName);
+      }
       added++;
     }else{
       const ei=items.findIndex(i=>i.id===item.exId);
       if(ei>=0){
         items[ei].done=true;
         items[ei].qty = item.qty; // usa a quantidade comprada do cupom
-        if(item.price!=null) setItemPrice(items[ei], item.price); // sempre o novo valor, com histórico
+        if(item.price!=null) setItemPrice(items[ei], item.price, pendingStoreName); // sempre o novo valor, com histórico e mercado
         if(!item.useExistingName) items[ei].name = item.name; // se escolheu manter nome do cupom
         matched++;
       }
@@ -1474,6 +1643,7 @@ window.addEventListener('popstate',()=>{
   else if(document.getElementById('edit-sheet').classList.contains('open')){closeEdit();history.pushState(null,'','')}
   else if(document.getElementById('similar-sheet').classList.contains('open')){closeSimilar();history.pushState(null,'','')}
   else if(document.getElementById('sync-sheet').classList.contains('open')){closeSyncMenu();history.pushState(null,'','')}
+  else if(document.getElementById('store-confirm-sheet').classList.contains('open')){closeStoreConfirm();history.pushState(null,'','')}
 });
 history.pushState(null,'','');
 </script>
