@@ -174,13 +174,14 @@ html, body { height: 100%; background: var(--bg); font-family: -apple-system, 'S
 .sheet-overlay {
   display: none; position: fixed; inset: 0;
   background: rgba(0,0,0,.45); z-index: 200; align-items: flex-end;
+  height: 100dvh;
 }
 .sheet-overlay.open { display: flex; }
 .sheet {
   background: var(--card); width: 100%;
   border-radius: 20px 20px 0 0;
   padding: 0 0 calc(20px + var(--safe-bottom));
-  max-height: 92vh; overflow-y: auto;
+  max-height: 85vh; max-height: 85dvh; overflow-y: auto;
 }
 .sheet-handle {
   width: 36px; height: 4px; background: var(--border);
@@ -269,7 +270,7 @@ video { width: 100%; border-radius: var(--radius-sm); margin-bottom: 8px; displa
 
 <div class="header">
   <div class="header-title">
-    <h1>🛒 Lista de Compras <span style="font-size:11px;font-weight:400;color:var(--text-muted);vertical-align:middle">v1.4</span></h1>
+    <h1>🛒 Lista de Compras <span style="font-size:11px;font-weight:400;color:var(--text-muted);vertical-align:middle">v1.5</span></h1>
     <p id="subtitle">Pronto para adicionar itens</p>
   </div>
   <button class="icon-btn" onclick="openScanner()" aria-label="Importar cupom fiscal" title="Cupom fiscal">📷</button>
@@ -495,6 +496,7 @@ video { width: 100%; border-radius: var(--radius-sm); margin-bottom: 8px; displa
         Confirme ou edite o nome do mercado antes de importar — isso ajuda a comparar preços entre lugares diferentes.
       </div>
       <div id="store-confirm-meta" style="font-size:12px;color:var(--text-muted);margin-bottom:8px"></div>
+      <div id="store-confirm-hint" style="display:none;background:#E6F1FB;color:#0C447C;border-radius:8px;padding:8px 12px;font-size:12px;margin-bottom:10px"></div>
       <input type="text" id="store-confirm-input" placeholder="Nome do mercado" style="width:100%;padding:12px 14px;border-radius:10px;border:0.5px solid var(--border);background:var(--bg);color:var(--text);font-size:15px;margin-bottom:16px">
       <div class="scan-actions">
         <button class="action-btn full" onclick="confirmStoreAndShowItems()">✓ Continuar</button>
@@ -1199,6 +1201,7 @@ async function testProxy(){
 function openScanner(){document.getElementById('scan-sheet').classList.add('open');backScan()}
 function closeScanner(){
   document.getElementById('scan-sheet').classList.remove('open');
+  document.getElementById('store-confirm-sheet').classList.remove('open');
   if(scanStream){scanStream.getTracks().forEach(t=>t.stop());scanStream=null}
   document.getElementById('sv').style.display='none';
   document.getElementById('sbox').style.display='block';
@@ -1258,7 +1261,9 @@ async function fetchCupom(url){
         useExistingName: !!match // por padrão, se achou match, usa o nome que já está na lista
       };
     });
-    pendingStoreName = info.store || '';
+    const rawStore = info.store || '';
+    pendingStoreName = getRememberedStoreName(rawStore) || rawStore;
+    pendingStoreRawName = rawStore;
     pendingStoreDate = info.date || '';
     pendingStoreTotal = info.total || null;
     setStatus('ok','✅ '+fi.length+' produto(s) encontrado(s).');
@@ -1267,19 +1272,63 @@ async function fetchCupom(url){
   }catch(e){setStatus('err','❌ Erro: '+e.message+'<br><small>Verifique se o proxy está online.</small>')}
 }
 
-let pendingStoreName='', pendingStoreDate='', pendingStoreTotal=null;
+/* MEMÓRIA DE NOMES DE MERCADO — associa o nome bruto do cupom (ex: "SUPERMERCADO XYZ LTDA")
+   ao nome que o usuário preferiu usar (ex: "Mercado do Bairro"), para sugerir automaticamente
+   da próxima vez que escanear um cupom do mesmo estabelecimento. */
+function getStoreMemory(){
+  try{ return JSON.parse(localStorage.getItem('store_name_memory')||'{}'); }catch(e){ return {}; }
+}
+function saveStoreMemory(mem){
+  try{ localStorage.setItem('store_name_memory', JSON.stringify(mem)); }catch(e){}
+}
+function getRememberedStoreName(rawName){
+  if(!rawName) return null;
+  const mem = getStoreMemory();
+  return mem[normalizeStr(rawName)] || null;
+}
+function rememberStoreName(rawName, chosenName){
+  if(!rawName || !chosenName) return;
+  const mem = getStoreMemory();
+  mem[normalizeStr(rawName)] = chosenName;
+  saveStoreMemory(mem);
+}
+
+let pendingStoreName='', pendingStoreRawName='', pendingStoreDate='', pendingStoreTotal=null;
 function openStoreConfirm(){
+  // Esconde o sheet do scanner para não sobrepor visualmente com o de confirmação
+  document.getElementById('scan-sheet').classList.remove('open');
+
+  const wasRemembered = pendingStoreRawName && getRememberedStoreName(pendingStoreRawName);
+  const hint = document.getElementById('store-confirm-hint');
+  if(wasRemembered){
+    hint.style.display='block';
+    hint.textContent = `💡 Lembrado de uma visita anterior — confirme se ainda está correto.`;
+  } else {
+    hint.style.display='none';
+  }
+
   document.getElementById('store-confirm-input').value = pendingStoreName;
   document.getElementById('store-confirm-meta').textContent = [pendingStoreDate, pendingStoreTotal?('R$ '+pendingStoreTotal.toFixed(2).replace('.',',')):''].filter(Boolean).join(' · ');
   document.getElementById('store-confirm-sheet').classList.add('open');
-  setTimeout(()=>document.getElementById('store-confirm-input').focus(),200);
+  setTimeout(()=>{
+    const inp = document.getElementById('store-confirm-input');
+    inp.focus();
+    inp.select(); // seleciona todo o texto, só digitar substitui
+  },250);
 }
 function closeStoreConfirm(){
   document.getElementById('store-confirm-sheet').classList.remove('open');
 }
 function confirmStoreAndShowItems(){
   pendingStoreName = document.getElementById('store-confirm-input').value.trim();
+  // Memoriza a escolha para a próxima vez que aparecer o mesmo nome bruto do cupom
+  if(pendingStoreRawName && pendingStoreName){
+    rememberStoreName(pendingStoreRawName, pendingStoreName);
+  }
   closeStoreConfirm();
+  document.getElementById('scan-sheet').classList.add('open'); // reabre o sheet do scanner com a lista de itens
+  document.getElementById('scan-p1').style.display='none';
+  document.getElementById('scan-p2').style.display='block';
   document.getElementById('imp-info').innerHTML = pendingStoreName?`<b>${pendingStoreName}</b>${pendingStoreDate?' · '+pendingStoreDate:''}${pendingStoreTotal?' · R$ '+pendingStoreTotal.toFixed(2).replace('.',','):''}`:importCands.length+' produto(s) encontrado(s)';
   renderImportList();
   document.getElementById('imp-wrap').style.display='block';
@@ -1595,6 +1644,24 @@ window.addEventListener('beforeunload', () => {
 function pushToSheetsBeacon(){
   // Best-effort: dispara o push com keepalive para sobreviver ao unload
   try { pushToSheets(); } catch(e){}
+}
+
+/* Reposiciona os sheets quando o teclado virtual abre (Chrome Android) */
+if (window.visualViewport) {
+  const allSheetOverlays = ['calc-sheet','scan-sheet','edit-sheet','similar-sheet','sync-sheet','store-confirm-sheet'];
+  function adjustForKeyboard(){
+    const vv = window.visualViewport;
+    const keyboardHeight = window.innerHeight - vv.height - vv.offsetTop;
+    allSheetOverlays.forEach(id=>{
+      const el = document.getElementById(id);
+      if(el && el.classList.contains('open')){
+        el.style.height = vv.height + 'px';
+        el.style.top = vv.offsetTop + 'px';
+      }
+    });
+  }
+  window.visualViewport.addEventListener('resize', adjustForKeyboard);
+  window.visualViewport.addEventListener('scroll', adjustForKeyboard);
 }
 
 /* INIT */
