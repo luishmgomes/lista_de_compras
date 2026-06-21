@@ -270,7 +270,7 @@ video { width: 100%; border-radius: var(--radius-sm); margin-bottom: 8px; displa
 
 <div class="header">
   <div class="header-title">
-    <h1>🛒 Lista de Compras <span style="font-size:11px;font-weight:400;color:var(--text-muted);vertical-align:middle">v1.6</span></h1>
+    <h1>🛒 Lista de Compras <span style="font-size:11px;font-weight:400;color:var(--text-muted);vertical-align:middle">v1.7</span></h1>
     <p id="subtitle">Pronto para adicionar itens</p>
   </div>
   <button class="icon-btn" onclick="openScanner()" aria-label="Importar cupom fiscal" title="Cupom fiscal">📷</button>
@@ -323,8 +323,20 @@ video { width: 100%; border-radius: var(--radius-sm); margin-bottom: 8px; displa
 
 <div class="list-body">
   <div id="list"></div>
-  <div id="done-section" style="display:none">
-    <div class="done-head">✓ Já no carrinho</div>
+
+  <!-- NO CARRINHO: itens marcados durante a compra, ainda contam na estimativa -->
+  <div id="cart-section" style="display:none;margin-top:14px">
+    <div class="done-head" style="display:flex;align-items:center;justify-content:space-between">
+      <span>🛒 No carrinho</span>
+      <span id="cart-total" style="font-weight:600;color:var(--primary)"></span>
+    </div>
+    <div id="cart-list"></div>
+    <button class="action-btn full" onclick="finalizePurchase()" style="margin-top:10px;background:var(--green);border-color:var(--green);color:#fff">🏁 Finalizar compra</button>
+  </div>
+
+  <!-- CONFIRMADOS: comprados de fato (via Finalizar compra ou importação de cupom) -->
+  <div id="done-section" style="display:none;margin-top:14px">
+    <div class="done-head">✓ Comprado</div>
     <div id="done-list"></div>
   </div>
 </div>
@@ -655,6 +667,21 @@ function load(){
   try{collapsed=JSON.parse(localStorage.getItem('compras_col')||'{}')}catch(e){collapsed={}}
   const pu=localStorage.getItem('nfce_proxy')||'';
   if(pu){const el=document.getElementById('purl');if(el){el.value=pu;el.classList.add('ok')}}
+  migrateConfirmedField();
+}
+
+// Migração: itens criados antes desta versão não têm o campo "confirmed".
+// Itens já marcados como done (done=true) viram automaticamente confirmados,
+// pois antes dessa atualização "done" já significava "comprado de fato".
+function migrateConfirmedField(){
+  let changed = false;
+  for(const item of items){
+    if(item.confirmed === undefined){
+      item.confirmed = !!item.done;
+      changed = true;
+    }
+  }
+  if(changed) saveLocal();
 }
 function saveLocal(){
   try{localStorage.setItem('compras_v1',JSON.stringify(items))}catch(e){}
@@ -818,7 +845,7 @@ function addItem(name,qty,price,done,skipSimilarityCheck){
     }
   }
 
-  items.push({id:Date.now()+Math.random(),name,qty,price,done:!!done,cat:classify(name),priceHistory:price!=null?[{price,date:new Date().toISOString()}]:[]});
+  items.push({id:Date.now()+Math.random(),name,qty,price,done:!!done,confirmed:!!done,cat:classify(name),priceHistory:price!=null?[{price,date:new Date().toISOString()}]:[]});
   finishAddItem(ni,nq,np);
 }
 
@@ -849,7 +876,7 @@ function confirmMergeSimilar(){
 function confirmNewSeparate(){
   if(!pendingNewItem) return;
   const {name,qty,price,done} = pendingNewItem;
-  items.push({id:Date.now()+Math.random(),name,qty,price,done:!!done,cat:classify(name)});
+  items.push({id:Date.now()+Math.random(),name,qty,price,done:!!done,confirmed:!!done,cat:classify(name)});
   closeSimilar();
   finishAddItem(document.getElementById('ni'),document.getElementById('nq'),document.getElementById('np'));
 }
@@ -903,35 +930,68 @@ function render(){
     visibleItems = items.filter(i=>itemBoughtAtStore(i, activeStoreFilter));
   }
 
-  const pend=visibleItems.filter(i=>!i.done),done=visibleItems.filter(i=>i.done);
-  document.getElementById('sp').textContent=pend.length;
-  document.getElementById('sd').textContent=done.length;
-  // Estimativa = soma só dos itens AINDA NÃO comprados. Assim, ao marcar itens no
-  // carrinho durante a compra, o valor não muda a cada toque — só cai quando o item
-  // realmente sai da lista de pendentes. Se tudo foi comprado, fica R$ 0,00.
-  const tot=pend.reduce((s,i)=>s+(i.price?i.price*i.qty:0),0);
-  document.getElementById('st').textContent=tot>0?'R$ '+tot.toFixed(2).replace('.',','):'R$ 0,00';
+  // 3 estados: pendente (!done), no carrinho (done && !confirmed), comprado (done && confirmed)
+  const pend = visibleItems.filter(i=>!i.done);
+  const inCart = visibleItems.filter(i=>i.done && !i.confirmed);
+  const confirmed = visibleItems.filter(i=>i.done && i.confirmed);
+
+  document.getElementById('sp').textContent = pend.length;
+  document.getElementById('sd').textContent = confirmed.length;
+  // Estimativa = soma de tudo que AINDA NÃO foi confirmado como comprado de fato
+  // (pendente + carrinho). Marcar no carrinho durante a compra NÃO tira da estimativa —
+  // só some quando confirmado (via "Finalizar compra" ou importação de cupom fiscal).
+  const tot = [...pend, ...inCart].reduce((s,i)=>s+(i.price?i.price*i.qty:0),0);
+  document.getElementById('st').textContent = tot>0?'R$ '+tot.toFixed(2).replace('.',','):'R$ 0,00';
 
   const cats={};
   for(const item of pend){if(!cats[item.cat])cats[item.cat]=[];cats[item.cat].push(item)}
 
   const el=document.getElementById('list');
   if(pend.length===0){
-    const msg = activeStoreFilter ? `Nenhum produto comprado em "${activeStoreFilter}" pendente.` : 'Tudo comprado!<br>Adicione itens para a próxima compra.';
+    const msg = activeStoreFilter ? `Nenhum produto comprado em "${activeStoreFilter}" pendente.` : (inCart.length>0 ? 'Tudo no carrinho! Finalize a compra quando estiver pronto.' : 'Tudo comprado!<br>Adicione itens para a próxima compra.');
     el.innerHTML=`<div class="empty-state"><span class="empty-icon">✅</span>${msg}</div>`;
   }else{
     el.innerHTML=Object.entries(cats).map(([cat,ci])=>{
       const d=CATS[cat]||{e:'🛒'};
       const open=!collapsed[cat];
-      return`<div class="cat-section"><div class="cat-head" onclick="toggleCat('${cat}')"><span class="cat-icon">${d.e}</span><span class="cat-name">${cat}</span><span class="cat-badge">${ci.length}</span><span class="cat-chevron${open?' open':''}">▼</span></div>${open?`<div>${ci.map(item=>`<div class="item-row"><input type="checkbox" class="item-cb" ${item.done?'checked':''} onchange="toggle(${item.id})"><div class="item-name${item.done?' done':''}" style="flex:1" onclick="openEdit(${item.id})">${item.name}${item.qty>1?`<span class="item-qty-badge">${item.qty}x</span>`:''}</div><div class="item-meta">${item.price?fmt(item.price*item.qty):''}</div><button class="item-edit" onclick="openEdit(${item.id})">✏️</button><button class="item-del" onclick="del(${item.id})">×</button></div>`).join('')}</div>`:''}</div>`;
+      return`<div class="cat-section"><div class="cat-head" onclick="toggleCat('${cat}')"><span class="cat-icon">${d.e}</span><span class="cat-name">${cat}</span><span class="cat-badge">${ci.length}</span><span class="cat-chevron${open?' open':''}">▼</span></div>${open?`<div>${ci.map(item=>`<div class="item-row"><input type="checkbox" class="item-cb" onchange="toggle(${item.id})"><div class="item-name" style="flex:1" onclick="openEdit(${item.id})">${item.name}${item.qty>1?`<span class="item-qty-badge">${item.qty}x</span>`:''}</div><div class="item-meta">${item.price?fmt(item.price*item.qty):''}</div><button class="item-edit" onclick="openEdit(${item.id})">✏️</button><button class="item-del" onclick="del(${item.id})">×</button></div>`).join('')}</div>`:''}</div>`;
     }).join('');
   }
 
+  // SEÇÃO "NO CARRINHO" — itens marcados mas ainda não confirmados como comprados
+  const csec=document.getElementById('cart-section'), cl=document.getElementById('cart-list');
+  if(inCart.length>0){
+    csec.style.display='block';
+    const cartTotal = inCart.reduce((s,i)=>s+(i.price?i.price*i.qty:0),0);
+    document.getElementById('cart-total').textContent = cartTotal>0 ? ('R$ '+cartTotal.toFixed(2).replace('.',',')) : '';
+    cl.innerHTML=inCart.map(i=>`<div class="cart-item"><input type="checkbox" class="item-cb" checked onchange="toggle(${i.id})"><span style="flex:1;font-size:14px" onclick="openEdit(${i.id})">${i.name}${i.qty>1?`<span class="item-qty-badge">${i.qty}x</span>`:''}</span><span style="font-size:12px;color:var(--text-sec)">${i.price?fmt(i.price*i.qty):''}</span><button class="item-edit" onclick="openEdit(${i.id})">✏️</button></div>`).join('');
+  }else{ csec.style.display='none'; }
+
+  // SEÇÃO "JÁ COMPRADO" — confirmados (via cupom ou "Finalizar compra")
   const ds=document.getElementById('done-section'),dl=document.getElementById('done-list');
-  if(done.length>0){
+  if(confirmed.length>0){
     ds.style.display='block';
-    dl.innerHTML=done.map(i=>`<div class="done-item"><input type="checkbox" class="item-cb" checked onchange="toggle(${i.id})"><span style="flex:1;font-size:14px;text-decoration:line-through;color:var(--text-muted)" onclick="openEdit(${i.id})">${i.name}${i.qty>1?`<span class="item-qty-badge" style="opacity:.6">${i.qty}x</span>`:''}</span><span style="font-size:12px;color:var(--text-sec)">${i.price?fmt(i.price*i.qty):''}</span><button class="item-edit" onclick="openEdit(${i.id})">✏️</button><button class="item-del" onclick="del(${i.id})">×</button></div>`).join('');
+    dl.innerHTML=confirmed.map(i=>`<div class="done-item"><input type="checkbox" class="item-cb" checked onchange="unconfirmItem(${i.id})"><span style="flex:1;font-size:14px;text-decoration:line-through;color:var(--text-muted)" onclick="openEdit(${i.id})">${i.name}${i.qty>1?`<span class="item-qty-badge" style="opacity:.6">${i.qty}x</span>`:''}</span><span style="font-size:12px;color:var(--text-sec)">${i.price?fmt(i.price*i.qty):''}</span><button class="item-edit" onclick="openEdit(${i.id})">✏️</button><button class="item-del" onclick="del(${i.id})">×</button></div>`).join('');
   }else{ds.style.display='none'}
+}
+
+// Confirma todos os itens do carrinho como definitivamente comprados (some da estimativa)
+function finalizePurchase(){
+  const inCart = items.filter(i=>i.done && !i.confirmed);
+  if(inCart.length===0) return;
+  if(!confirm(`Finalizar compra? ${inCart.length} produto(s) do carrinho serão marcados como comprados e sairão da estimativa.`)) return;
+  inCart.forEach(i=>{ i.confirmed = true; });
+  save(); render();
+  document.getElementById('subtitle').textContent = 'Compra finalizada!';
+}
+
+// Desmarcar um item já confirmado o volta para pendente (não para "no carrinho")
+function unconfirmItem(id){
+  const item = items.find(i=>i.id===id);
+  if(!item) return;
+  item.done = false;
+  item.confirmed = false;
+  save(); render();
 }
 
 /* EDITAR ITEM */
@@ -1391,6 +1451,7 @@ function confirmImport(){
       const ei=items.findIndex(i=>i.id===item.exId);
       if(ei>=0){
         items[ei].done=true;
+        items[ei].confirmed=true; // cupom fiscal é prova de compra real, pula direto para confirmado
         items[ei].qty = item.qty; // usa a quantidade comprada do cupom
         if(item.price!=null) setItemPrice(items[ei], item.price, pendingStoreName); // sempre o novo valor, com histórico e mercado
         if(!item.useExistingName) items[ei].name = item.name; // se escolheu manter nome do cupom
@@ -1544,11 +1605,11 @@ async function ensureSheet(){
     await sheetsRequest('POST', ':batchUpdate', {
       requests:[{ addSheet:{ properties:{ title: SHEET_NAME } } }]
     });
-    // Add header row
-    await sheetsRequest('PUT', '/values/' + SHEET_NAME + '!A1:G1?valueInputOption=RAW', {
-      values:[['id','name','qty','price','done','cat','updated']]
-    });
   }
+  // Garante que o cabeçalho está atualizado (cobre planilhas criadas antes da coluna "confirmed")
+  await sheetsRequest('PUT', '/values/' + SHEET_NAME + '!A1:H1?valueInputOption=RAW', {
+    values:[['id','name','qty','price','done','cat','updated','confirmed']]
+  });
   return true;
 }
 
@@ -1558,21 +1619,21 @@ async function pushToSheets(){
   try {
     await ensureSheet();
     const rows = items.map(i => [
-      String(i.id), i.name, i.qty, i.price || '', i.done ? '1' : '0', i.cat, new Date().toISOString()
+      String(i.id), i.name, i.qty, i.price || '', i.done ? '1' : '0', i.cat, new Date().toISOString(), i.confirmed ? '1' : '0'
     ]);
     // IMPORTANTE: limpa um range generoso (até 2000 linhas) para garantir que itens
     // excluídos não deixem "lixo" órfão no Sheets caso a lista tenha diminuído de tamanho.
     // Limpar apenas até rows.length deixava sobras de quando a lista era maior, e essas
     // sobras voltavam como itens fantasma no próximo pull.
-    await sheetsRequest('POST', '/values/' + SHEET_NAME + '!A2:G2000:clear', {});
+    await sheetsRequest('POST', '/values/' + SHEET_NAME + '!A2:H2000:clear', {});
     if(rows.length > 0){
-      await sheetsRequest('PUT', '/values/' + SHEET_NAME + '!A2:G' + (rows.length+1) + '?valueInputOption=RAW', {
+      await sheetsRequest('PUT', '/values/' + SHEET_NAME + '!A2:H' + (rows.length+1) + '?valueInputOption=RAW', {
         values: rows
       });
     }
     // Salva a versão local atual junto com o push, para o pull saber se está desatualizado
     const localVersion = localStorage.getItem('compras_version') || String(Date.now());
-    await sheetsRequest('PUT', '/values/' + SHEET_NAME + '!I1?valueInputOption=RAW', {
+    await sheetsRequest('PUT', '/values/' + SHEET_NAME + '!J1?valueInputOption=RAW', {
       values: [[localVersion]]
     });
     localStorage.setItem('compras_last_pushed_version', localVersion);
@@ -1597,7 +1658,7 @@ async function pullFromSheets(){
     const localVersion = localStorage.getItem('compras_version');
     const lastPushedVersion = localStorage.getItem('compras_last_pushed_version');
 
-    const data = await sheetsRequest('GET', '/values/' + SHEET_NAME + '!A2:G2000');
+    const data = await sheetsRequest('GET', '/values/' + SHEET_NAME + '!A2:H2000');
     if(!data || !data.values || data.values.length === 0) return false;
     let remoteItems = data.values.map(r => ({
       id: parseFloat(r[0]) || Date.now()+Math.random(),
@@ -1605,7 +1666,10 @@ async function pullFromSheets(){
       qty: parseFloat(r[2]) || 1,
       price: r[3] ? parseFloat(r[3]) : null,
       done: r[4] === '1',
-      cat: r[5] || 'Mercearia'
+      cat: r[5] || 'Mercearia',
+      // Coluna H pode não existir em planilhas antigas (antes desta feature). Nesse caso,
+      // r[7] é undefined — assume confirmed = done, mantendo o comportamento anterior.
+      confirmed: r[7] !== undefined ? (r[7] === '1') : (r[4] === '1')
     })).filter(i => i.name);
 
     // Proteção extra: remove duplicatas pelo id (mantém a última ocorrência, que é a mais recente)
