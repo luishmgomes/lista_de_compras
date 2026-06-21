@@ -81,14 +81,14 @@ html, body { height: 100%; background: var(--bg); font-family: -apple-system, 'S
 }
 .add-row { display: flex; gap: 6px; }
 .add-row input {
-  flex: 1; padding: 10px 12px; font-size: 15px;
+  flex: 1; min-width: 0; padding: 10px 10px; font-size: 15px;
   border-radius: var(--radius-sm); border: 0.5px solid var(--border);
   background: var(--bg); color: var(--text);
   -webkit-appearance: none;
 }
 .add-row input:focus { outline: none; border-color: var(--primary); }
-.qty-inp { width: 56px !important; flex: none !important; text-align: center; }
-.price-inp { width: 92px !important; flex: none !important; text-align: right; }
+.qty-inp { width: 50px !important; flex: none !important; text-align: center; padding-left:4px !important; padding-right:4px !important; }
+.price-inp { width: 78px !important; flex: none !important; text-align: right; }
 
 /* LIST */
 .list-body { padding: 10px 16px; padding-bottom: calc(80px + var(--safe-bottom)); }
@@ -269,7 +269,7 @@ video { width: 100%; border-radius: var(--radius-sm); margin-bottom: 8px; displa
 
 <div class="header">
   <div class="header-title">
-    <h1>🛒 Lista de Compras <span style="font-size:11px;font-weight:400;color:var(--text-muted);vertical-align:middle">v1.3</span></h1>
+    <h1>🛒 Lista de Compras <span style="font-size:11px;font-weight:400;color:var(--text-muted);vertical-align:middle">v1.4</span></h1>
     <p id="subtitle">Pronto para adicionar itens</p>
   </div>
   <button class="icon-btn" onclick="openScanner()" aria-label="Importar cupom fiscal" title="Cupom fiscal">📷</button>
