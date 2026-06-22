@@ -170,6 +170,28 @@ html, body { height: 100%; background: var(--bg); font-family: -apple-system, 'S
 .fab-primary { background: var(--primary); color: #fff; }
 .fab-secondary { background: var(--card); color: var(--text-sec); width: 44px; height: 44px; font-size: 18px; }
 
+/* UNDO TOAST */
+.undo-toast {
+  position: fixed; bottom: calc(80px + var(--safe-bottom)); left: 16px; right: 72px;
+  background: #1a1a1a; color: #fff;
+  border-radius: 12px; padding: 12px 16px;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  z-index: 70; box-shadow: 0 4px 16px rgba(0,0,0,.3);
+  transform: translateY(0); opacity: 1;
+  transition: opacity .3s, transform .3s;
+}
+.undo-toast.hiding { opacity: 0; transform: translateY(10px); pointer-events: none; }
+.undo-toast-msg { font-size: 13px; flex: 1; }
+.undo-btn {
+  background: none; border: none; color: var(--primary);
+  font-size: 13px; font-weight: 700; cursor: pointer; padding: 4px 0; white-space: nowrap;
+}
+.undo-progress {
+  position: absolute; bottom: 0; left: 0; height: 3px;
+  background: var(--primary); border-radius: 0 0 12px 12px;
+  transition: width linear;
+}
+
 /* BOTTOM SHEET */
 .sheet-overlay {
   display: none; position: fixed; inset: 0;
@@ -270,7 +292,7 @@ video { width: 100%; border-radius: var(--radius-sm); margin-bottom: 8px; displa
 
 <div class="header">
   <div class="header-title">
-    <h1>🛒 Lista de Compras <span style="font-size:11px;font-weight:400;color:var(--text-muted);vertical-align:middle">v1.7</span></h1>
+    <h1>🛒 Lista de Compras <span style="font-size:11px;font-weight:400;color:var(--text-muted);vertical-align:middle">v1.8</span></h1>
     <p id="subtitle">Pronto para adicionar itens</p>
   </div>
   <button class="icon-btn" onclick="openScanner()" aria-label="Importar cupom fiscal" title="Cupom fiscal">📷</button>
@@ -344,6 +366,13 @@ video { width: 100%; border-radius: var(--radius-sm); margin-bottom: 8px; displa
 <!-- FAB -->
 <div class="fab-row">
   <button class="fab fab-primary" onclick="document.getElementById('ni').focus();window.scrollTo(0,0)" aria-label="Novo item" title="Novo item">＋</button>
+</div>
+
+<!-- UNDO TOAST -->
+<div class="undo-toast" id="undo-toast" style="display:none" role="status" aria-live="polite">
+  <span class="undo-toast-msg" id="undo-msg"></span>
+  <button class="undo-btn" onclick="undoLast()">Desfazer</button>
+  <div class="undo-progress" id="undo-progress"></div>
 </div>
 
 <!-- MENU DE SINCRONIZAÇÃO -->
@@ -881,7 +910,71 @@ function confirmNewSeparate(){
   finishAddItem(document.getElementById('ni'),document.getElementById('nq'),document.getElementById('np'));
 }
 
-function toggle(id){const i=items.find(x=>x.id===id);if(i){i.done=!i.done;save();render()}}
+/* ============ SISTEMA DE DESFAZER ============ */
+let undoSnapshot = null;
+let undoTimer = null;
+const UNDO_DURATION = 5000; // ms
+
+function showUndoToast(msg){
+  clearTimeout(undoTimer);
+  const toast = document.getElementById('undo-toast');
+  const msgEl = document.getElementById('undo-msg');
+  const progress = document.getElementById('undo-progress');
+  if(!toast) return;
+  toast.style.display = 'flex';
+  toast.classList.remove('hiding');
+  msgEl.textContent = msg;
+  // Barra de progresso animada
+  progress.style.transition = 'none';
+  progress.style.width = '100%';
+  requestAnimationFrame(()=>{
+    requestAnimationFrame(()=>{
+      progress.style.transition = `width ${UNDO_DURATION}ms linear`;
+      progress.style.width = '0%';
+    });
+  });
+  undoTimer = setTimeout(dismissUndoToast, UNDO_DURATION);
+}
+
+function dismissUndoToast(){
+  clearTimeout(undoTimer);
+  undoTimer = null;
+  undoSnapshot = null;
+  const toast = document.getElementById('undo-toast');
+  if(!toast) return;
+  toast.classList.add('hiding');
+  setTimeout(()=>{ toast.style.display='none'; toast.classList.remove('hiding'); }, 300);
+}
+
+function undoLast(){
+  if(!undoSnapshot) return;
+  items = undoSnapshot;
+  undoSnapshot = null;
+  save(); render();
+  dismissUndoToast();
+}
+
+function toggle(id){
+  const i=items.find(x=>x.id===id);
+  if(!i) return;
+  // Salva snapshot antes de mexer (permite desfazer)
+  undoSnapshot = JSON.parse(JSON.stringify(items));
+  if(!i.done){
+    // Pendente → Carrinho
+    i.done=true; i.confirmed=false;
+    showUndoToast(`"${i.name}" foi para o carrinho`);
+  } else if(i.done && !i.confirmed){
+    // Carrinho → Pendente (desmarca)
+    i.done=false;
+    showUndoToast(`"${i.name}" voltou para a lista`);
+  } else {
+    // Confirmado → Pendente (desmarca do "Comprado")
+    i.done=false; i.confirmed=false;
+    showUndoToast(`"${i.name}" voltou para a lista`);
+  }
+  save(); render();
+}
+
 function del(id){items=items.filter(i=>i.id!==id);save();render()}
 function toggleCat(c){collapsed[c]=!collapsed[c];try{localStorage.setItem('compras_col',JSON.stringify(collapsed))}catch(e){}render()}
 
