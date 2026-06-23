@@ -292,7 +292,7 @@ video { width: 100%; border-radius: var(--radius-sm); margin-bottom: 8px; displa
 
 <div class="header">
   <div class="header-title">
-    <h1>🛒 Lista de Compras <span style="font-size:11px;font-weight:400;color:var(--text-muted);vertical-align:middle">v1.8</span></h1>
+    <h1>🛒 Lista de Compras <span style="font-size:11px;font-weight:400;color:var(--text-muted);vertical-align:middle">v1.9</span></h1>
     <p id="subtitle">Pronto para adicionar itens</p>
   </div>
   <button class="icon-btn" onclick="openScanner()" aria-label="Importar cupom fiscal" title="Cupom fiscal">📷</button>
@@ -975,7 +975,14 @@ function toggle(id){
   save(); render();
 }
 
-function del(id){items=items.filter(i=>i.id!==id);save();render()}
+function del(id){
+  const item = items.find(i=>i.id===id);
+  if(!item) return;
+  undoSnapshot = JSON.parse(JSON.stringify(items));
+  items = items.filter(i=>i.id!==id);
+  save(); render();
+  showUndoToast(`"${item.name}" foi excluído`);
+}
 function toggleCat(c){collapsed[c]=!collapsed[c];try{localStorage.setItem('compras_col',JSON.stringify(collapsed))}catch(e){}render()}
 
 function fmt(p){return p!=null?'R$ '+p.toFixed(2).replace('.',','):''}
@@ -1072,19 +1079,21 @@ function render(){
 function finalizePurchase(){
   const inCart = items.filter(i=>i.done && !i.confirmed);
   if(inCart.length===0) return;
-  if(!confirm(`Finalizar compra? ${inCart.length} produto(s) do carrinho serão marcados como comprados e sairão da estimativa.`)) return;
+  undoSnapshot = JSON.parse(JSON.stringify(items));
   inCart.forEach(i=>{ i.confirmed = true; });
   save(); render();
-  document.getElementById('subtitle').textContent = 'Compra finalizada!';
+  showUndoToast(`${inCart.length} produto(s) marcado(s) como comprado(s)`);
 }
 
 // Desmarcar um item já confirmado o volta para pendente (não para "no carrinho")
 function unconfirmItem(id){
   const item = items.find(i=>i.id===id);
   if(!item) return;
+  undoSnapshot = JSON.parse(JSON.stringify(items));
   item.done = false;
   item.confirmed = false;
   save(); render();
+  showUndoToast(`"${item.name}" voltou para a lista`);
 }
 
 /* EDITAR ITEM */
@@ -1238,10 +1247,12 @@ function saveEdit(){
 }
 function deleteFromEdit(){
   if(editingId==null) return;
-  if(confirm('Excluir este produto da lista?')){
-    del(editingId);
-    closeEdit();
-  }
+  const item = items.find(i=>i.id===editingId);
+  if(!item) return;
+  undoSnapshot = JSON.parse(JSON.stringify(items));
+  items = items.filter(i=>i.id!==editingId);
+  save(); render(); closeEdit();
+  showUndoToast(`"${item.name}" foi excluído`);
 }
 
 /* CALCULADORA: troca de aba */
