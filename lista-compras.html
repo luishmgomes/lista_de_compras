@@ -434,10 +434,10 @@ video { width: 100%; border-radius: var(--radius-sm); margin-bottom: 8px; displa
 
         <div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:10px">
           <div style="font-size:12px;font-weight:600;color:var(--text-sec);margin-bottom:8px">PRODUTO A</div>
+          <input type="number" id="ua-price" placeholder="Preço R$" step="0.01" inputmode="decimal" style="width:100%;min-width:0;padding:9px 10px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);color:var(--text);font-size:14px;margin-bottom:6px" oninput="calcUnitPrice()">
           <div style="display:flex;gap:6px;margin-bottom:6px">
-            <input type="number" id="ua-price" placeholder="Preço R$" step="0.01" inputmode="decimal" style="flex:1;padding:9px 10px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);color:var(--text);font-size:14px" oninput="calcUnitPrice()">
-            <input type="number" id="ua-qty" placeholder="Peso/Volume" step="0.01" inputmode="decimal" style="flex:1;padding:9px 10px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);color:var(--text);font-size:14px" oninput="calcUnitPrice()">
-            <select id="ua-unit" onchange="calcUnitPrice()" style="padding:9px 6px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px">
+            <input type="number" id="ua-qty" placeholder="Peso/Volume" step="0.01" inputmode="decimal" style="flex:1;min-width:0;padding:9px 10px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);color:var(--text);font-size:14px" oninput="calcUnitPrice()">
+            <select id="ua-unit" onchange="calcUnitPrice()" style="width:72px;flex:none;padding:9px 6px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px">
               <option value="g">g</option>
               <option value="kg">kg</option>
               <option value="ml">ml</option>
@@ -449,10 +449,10 @@ video { width: 100%; border-radius: var(--radius-sm); margin-bottom: 8px; displa
 
         <div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:14px">
           <div style="font-size:12px;font-weight:600;color:var(--text-sec);margin-bottom:8px">PRODUTO B</div>
+          <input type="number" id="ub-price" placeholder="Preço R$" step="0.01" inputmode="decimal" style="width:100%;min-width:0;padding:9px 10px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);color:var(--text);font-size:14px;margin-bottom:6px" oninput="calcUnitPrice()">
           <div style="display:flex;gap:6px;margin-bottom:6px">
-            <input type="number" id="ub-price" placeholder="Preço R$" step="0.01" inputmode="decimal" style="flex:1;padding:9px 10px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);color:var(--text);font-size:14px" oninput="calcUnitPrice()">
-            <input type="number" id="ub-qty" placeholder="Peso/Volume" step="0.01" inputmode="decimal" style="flex:1;padding:9px 10px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);color:var(--text);font-size:14px" oninput="calcUnitPrice()">
-            <select id="ub-unit" onchange="calcUnitPrice()" style="padding:9px 6px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px">
+            <input type="number" id="ub-qty" placeholder="Peso/Volume" step="0.01" inputmode="decimal" style="flex:1;min-width:0;padding:9px 10px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);color:var(--text);font-size:14px" oninput="calcUnitPrice()">
+            <select id="ub-unit" onchange="calcUnitPrice()" style="width:72px;flex:none;padding:9px 6px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px">
               <option value="g">g</option>
               <option value="kg">kg</option>
               <option value="ml">ml</option>
@@ -502,16 +502,16 @@ video { width: 100%; border-radius: var(--radius-sm); margin-bottom: 8px; displa
       <div id="edit-merge-suggestion" style="display:none;background:#FAEEDA;border-radius:10px;padding:12px;margin-bottom:12px;font-size:13px;color:#633806"></div>
       <div style="margin-bottom:12px">
         <div style="font-size:12px;font-weight:600;color:var(--text-sec);margin-bottom:6px">NOME</div>
-        <input type="text" id="edit-name" oninput="checkEditSimilarity()" style="width:100%;padding:11px 12px;border-radius:10px;border:0.5px solid var(--border);background:var(--bg);color:var(--text);font-size:15px">
+        <input type="text" id="edit-name" oninput="checkEditSimilarity()" onfocus="setTimeout(()=>this.scrollIntoView({behavior:'smooth',block:'center'}),300)" style="width:100%;padding:11px 12px;border-radius:10px;border:0.5px solid var(--border);background:var(--bg);color:var(--text);font-size:15px">
       </div>
       <div style="display:flex;gap:8px;margin-bottom:12px">
         <div style="flex:1">
           <div style="font-size:12px;font-weight:600;color:var(--text-sec);margin-bottom:6px">QUANTIDADE</div>
-          <input type="number" id="edit-qty" min="1" step="1" inputmode="numeric" style="width:100%;padding:11px 12px;border-radius:10px;border:0.5px solid var(--border);background:var(--bg);color:var(--text);font-size:15px" onfocus="this.select()">
+          <input type="number" id="edit-qty" min="1" step="1" inputmode="numeric" style="width:100%;padding:11px 12px;border-radius:10px;border:0.5px solid var(--border);background:var(--bg);color:var(--text);font-size:15px" onfocus="this.select();setTimeout(()=>this.scrollIntoView({behavior:'smooth',block:'center'}),300)">
         </div>
         <div style="flex:1">
           <div style="font-size:12px;font-weight:600;color:var(--text-sec);margin-bottom:6px">PREÇO R$</div>
-          <input type="number" id="edit-price" min="0" step="0.01" inputmode="decimal" style="width:100%;padding:11px 12px;border-radius:10px;border:0.5px solid var(--border);background:var(--bg);color:var(--text);font-size:15px" onfocus="this.select()">
+          <input type="number" id="edit-price" min="0" step="0.01" inputmode="decimal" style="width:100%;padding:11px 12px;border-radius:10px;border:0.5px solid var(--border);background:var(--bg);color:var(--text);font-size:15px" onfocus="this.select();setTimeout(()=>this.scrollIntoView({behavior:'smooth',block:'center'}),300)">
         </div>
       </div>
       <div id="edit-price-history" style="display:none;margin-bottom:16px"></div>
@@ -1822,7 +1822,6 @@ if (window.visualViewport) {
   const allSheetOverlays = ['calc-sheet','scan-sheet','edit-sheet','similar-sheet','sync-sheet','store-confirm-sheet'];
   function adjustForKeyboard(){
     const vv = window.visualViewport;
-    const keyboardHeight = window.innerHeight - vv.height - vv.offsetTop;
     allSheetOverlays.forEach(id=>{
       const el = document.getElementById(id);
       if(el && el.classList.contains('open')){
@@ -1830,6 +1829,11 @@ if (window.visualViewport) {
         el.style.top = vv.offsetTop + 'px';
       }
     });
+    // Garante que o campo com foco fique visível após o teclado abrir
+    const focused = document.activeElement;
+    if(focused && focused.tagName !== 'BODY'){
+      setTimeout(()=>focused.scrollIntoView({behavior:'smooth', block:'center'}), 50);
+    }
   }
   window.visualViewport.addEventListener('resize', adjustForKeyboard);
   window.visualViewport.addEventListener('scroll', adjustForKeyboard);
